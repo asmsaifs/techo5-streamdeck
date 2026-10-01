@@ -568,7 +568,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 2.3 Inspector + icon picker — schema-driven forms, key recorder, Test button, run-command confirm on save, icon picker (Lucide search + upload). Emoji icons still not drawn; icon/background colour and label size open
 - [x] 2.4 Devices + settings → **v0.2.0** (not tagged yet, same wait as v0.1.0 for the real Show check). Live fps/bit rate, profile per Show, new/delete profile, listen address, key show/regenerate, copyable setup text
 - [x] 3.1 Global hotkeys + `trigger` CLI — Wails GlobalShortcut kept in step with config.json (internal/hotkeys), inspector field with recorder, `trigger` over control.sock, tested on the real binary with the CLI; a real key press and a Wayland check are open
-- [ ] 3.2 Media/volume/mic/system
+- [x] 3.2 Media/volume/mic/system — commands per OS tested with a fake runner; macOS volume checked for real. Hands-on checklist in docs/actions.md; Windows has no mic mute and a stepped volume.set (Core Audio open); Linux untested
 - [ ] 3.3 HTTP / Home Assistant / OBS
 - [ ] 3.4 Live tiles
 - [ ] 3.5 Profile auto-switch

@@ -81,6 +81,7 @@ func (r *recSys) Open(_ context.Context, _ actions.OpenKind, target string) erro
 	return nil
 }
 func (*recSys) Keys(context.Context, actions.Combo) error    { return nil }
+func (*recSys) Control(context.Context, actions.Control) error { return nil }
 func (*recSys) Type(context.Context, string) error           { return nil }
 func (*recSys) Exec(context.Context, actions.ExecSpec) error { return nil }
 

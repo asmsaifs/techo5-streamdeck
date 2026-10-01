@@ -5,7 +5,7 @@ package actions
 type Field struct {
 	Name     string   `json:"name"`
 	Label    string   `json:"label"`
-	Kind     string   `json:"kind"` // string, text, number, bool, enum, path, keys, list, action, actions
+	Kind     string   `json:"kind"` // string, text, number, bool, tribool (unset, true, false), enum, path, keys, list, action, actions
 	Required bool     `json:"required,omitempty"`
 	Enum     []string `json:"enum,omitempty"`
 	Help     string   `json:"help,omitempty"`
@@ -44,6 +44,20 @@ func Schemas() []Schema {
 			Fields: []Field{{Name: "keys", Label: "Keys", Kind: "keys", Required: true, Help: "Press the combination to record it"}}},
 		{Type: "type", Label: "Type text", Group: "Keyboard", Runnable: true,
 			Fields: []Field{{Name: "text", Label: "Text", Kind: "text", Required: true}}},
+		{Type: "media.play", Label: "Play / pause", Group: "Media", Runnable: true},
+		{Type: "media.next", Label: "Next track", Group: "Media", Runnable: true},
+		{Type: "media.prev", Label: "Previous track", Group: "Media", Runnable: true},
+		{Type: "volume.up", Label: "Volume up", Group: "Audio", Runnable: true},
+		{Type: "volume.down", Label: "Volume down", Group: "Audio", Runnable: true},
+		{Type: "volume.set", Label: "Set volume", Group: "Audio", Runnable: true,
+			Fields: []Field{{Name: "level", Label: "Level (%)", Kind: "number", Required: true, Min: num(0), Max: num(100)}}},
+		{Type: "volume.mute", Label: "Mute sound", Group: "Audio", Runnable: true, Help: "Mutes or unmutes the speakers.",
+			Fields: []Field{{Name: "mute", Label: "Mute", Kind: "tribool", Help: "Flip alternates. For a button that rings when muted, use a Toggle with Mute and Unmute."}}},
+		{Type: "mic.mute", Label: "Mute microphone", Group: "Audio", Runnable: true, Help: "Mutes or unmutes the microphone.",
+			Fields: []Field{{Name: "mute", Label: "Mute", Kind: "tribool", Help: "Flip alternates. For a button that rings when muted, use a Toggle with Mute and Unmute."}}},
+		{Type: "lock", Label: "Lock screen", Group: "System", Runnable: true},
+		{Type: "sleep", Label: "Sleep", Group: "System", Runnable: true},
+		{Type: "screenshot", Label: "Screenshot", Group: "System", Runnable: true, Help: "Saves a picture of the screen to the Desktop (Pictures on Linux); on Windows it opens the Snipping Tool."},
 		{Type: "run", Label: "Run command", Group: "Scripts", Runnable: true,
 			Help: "Runs a program with arguments. Nothing in an argument is reinterpreted unless Shell is on.",
 			Fields: []Field{

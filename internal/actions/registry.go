@@ -45,6 +45,7 @@ func New(sys System, log *slog.Logger) *Registry {
 	r.Register("delay", delay)
 	r.Register("multi", multi)
 	r.Register("toggle", toggle)
+	registerControls(r)
 	return r
 }
 

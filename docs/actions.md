@@ -13,6 +13,13 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 | `keys` | `keys` | `"Cmd+Space"`, `"CmdOrCtrl+Shift+4"`, `"F5"`, `"Ctrl+Alt+Delete"`. CmdOrCtrl is Cmd on a Mac and Ctrl elsewhere. |
 | `type` | `text` | Types the text as keystrokes. |
 | `run` | `command`, `args`, `cwd`, `timeout` (s, 30), `shell`, `detach` | `command` + `args` run directly, so no argument is read by a shell. `shell: true` runs `command` as a shell line. `detach: true` starts it and does not wait, for a program that stays open. A failure shows the end of the command's output in the log. |
+| `media.play`, `media.next`, `media.prev` | | macOS and Windows press the system's media keys (the active player gets them; macOS needs the Accessibility permission). Linux runs `playerctl` (install it). |
+| `volume.up`, `volume.down` | | 6 % per press. |
+| `volume.set` | `level` (0-100) | Windows has no way to read or set the level, so it steps to 0 and counts up in 2 % steps. |
+| `volume.mute` | `mute` (true, false, or empty to flip) | Windows can only flip. |
+| `mic.mute` | `mute` (as above) | macOS has no input mute: it sets the input level to 0 and puts the old level back. Linux `wpctl`/`pactl`. **Not on Windows yet** (needs the Core Audio API). |
+| `lock`, `sleep` | | macOS lock presses Ctrl+Cmd+Q (Accessibility), sleep is `pmset sleepnow`. Windows `rundll32`. Linux `loginctl lock-session`, `systemctl suspend`. |
+| `screenshot` | | Saves a PNG to the Desktop (macOS) or Pictures (Linux: grim, gnome-screenshot, spectacle or scrot). Windows opens the Snipping Tool (Win+Shift+S). |
 | `delay` | `ms` | 0 to 60000. For use in `multi`. |
 | `multi` | `steps` | Runs the steps in order and stops at the first that fails. |
 | `toggle` | `on`, `off` | Runs `on` when off and `off` when on; flips only if it worked. The deck ringed in the accent colour when on. Starts off and does not look at the computer, so it is out of step if the thing is changed another way. |
@@ -54,3 +61,10 @@ can press only buttons the config has.
 
 Manual check (needs a person at the screen): save a hotkey for an "Open site" button, press it
 with another app in front; run `techo5-streamdeck trigger default/home/0,0` from a terminal.
+
+### Manual checklist for 3.2
+
+On each OS press the button from the editor's Test and see it work: play/pause with a player
+open, next/previous, volume up/down/set 30, mute and unmute, mic mute and unmute (check in the
+system's sound settings), screenshot file appears, and last lock and sleep. Checked so far: macOS
+volume read/up/down against the real system; everything else only by tests of the commands.

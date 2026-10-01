@@ -36,6 +36,8 @@ type System interface {
 	Keys(ctx context.Context, c Combo) error
 	Type(ctx context.Context, text string) error
 	Exec(ctx context.Context, e ExecSpec) error
+	// Control does something to the computer as a whole: media keys, sound, lock, sleep.
+	Control(ctx context.Context, c Control) error
 }
 
 // OS is the System of the computer this runs on.
@@ -46,6 +48,8 @@ type osSystem struct{}
 func (osSystem) Open(ctx context.Context, kind OpenKind, target string) error {
 	return openTarget(ctx, kind, target)
 }
+
+func (osSystem) Control(ctx context.Context, c Control) error { return osEnv().do(ctx, c) }
 
 func (osSystem) Keys(_ context.Context, c Combo) error     { return tapKeys(c) }
 func (osSystem) Type(_ context.Context, text string) error { return typeText(text) }
@@ -141,5 +145,10 @@ func (d dryRun) Type(_ context.Context, text string) error {
 
 func (d dryRun) Exec(_ context.Context, e ExecSpec) error {
 	d.log.Info("dry run: run", "command", e.Command, "args", e.Args, "dir", e.Dir, "shell", e.Shell, "wait", e.Wait)
+	return nil
+}
+
+func (d dryRun) Control(_ context.Context, c Control) error {
+	d.log.Info("dry run: control", "kind", c.Kind, "level", c.Level, "mute", c.Mute)
 	return nil
 }

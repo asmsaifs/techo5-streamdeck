@@ -99,6 +99,18 @@ function FieldInput({ f, ctx, value, set }: { f: Field; ctx: Ctx; value: unknown
           {help}
         </label>
       );
+    case "tribool":
+      return (
+        <label>
+          {label}
+          <select value={value === undefined ? "" : String(value)} onChange={(e) => set(e.target.value === "" ? undefined : e.target.value === "true")}>
+            <option value="">Flip</option>
+            <option value="true">Mute</option>
+            <option value="false">Unmute</option>
+          </select>
+          {help}
+        </label>
+      );
     case "enum":
       return (
         <label>

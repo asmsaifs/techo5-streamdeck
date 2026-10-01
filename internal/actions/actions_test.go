@@ -17,11 +17,12 @@ import (
 
 // fake is a System that records what it was asked and can be made to fail.
 type fake struct {
-	mu    sync.Mutex
-	calls []string
-	err   error
-	execs []ExecSpec
-	keys  []Combo
+	mu       sync.Mutex
+	calls    []string
+	err      error
+	execs    []ExecSpec
+	keys     []Combo
+	controls []Control
 }
 
 func (f *fake) rec(s string) error {
@@ -37,6 +38,10 @@ func (f *fake) Open(_ context.Context, k OpenKind, t string) error {
 func (f *fake) Keys(_ context.Context, c Combo) error {
 	f.keys = append(f.keys, c)
 	return f.rec("keys " + c.Key)
+}
+func (f *fake) Control(_ context.Context, c Control) error {
+	f.controls = append(f.controls, c)
+	return f.rec("control " + c.Kind)
 }
 func (f *fake) Type(_ context.Context, s string) error { return f.rec("type " + s) }
 func (f *fake) Exec(ctx context.Context, e ExecSpec) error {
