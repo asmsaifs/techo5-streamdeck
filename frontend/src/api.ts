@@ -13,3 +13,12 @@ export const preview = (c: Config, profile: string, page: string, w: number, h: 
   call<string>("Preview", JSON.stringify(c), profile, page, w, h);
 
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+import type { Schema } from "./schema";
+
+export const loadSchemas = () => call<Schema[]>("Schemas");
+export const testAction = (a: unknown) => call<void>("TestAction", JSON.stringify(a));
+export const lucideNames = () => call<string[]>("LucideNames");
+export const lucideSVGs = (names: string[]) => call<Record<string, string>>("LucideSVGs", names);
+export const userIcons = () => call<Record<string, string>>("UserIcons");
+export const uploadIcon = (name: string, dataURL: string) => call<string>("UploadIcon", name, dataURL);

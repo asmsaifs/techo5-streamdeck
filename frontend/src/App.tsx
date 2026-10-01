@@ -1,9 +1,13 @@
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorText, loadConfig, preview, saveConfig } from "./api";
+import { ActionForm } from "./ActionForm";
+import { errorText, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
+import { IconPicker } from "./IconPicker";
 import { cellRects } from "./layout";
 import * as m from "./model";
+import { actionProblems, blankAction, bySchemaType, firstProblem } from "./schema";
+import type { Schemas } from "./schema";
 
 // The Show 5's screen. The preview is drawn at this size; a Show of another size gets the same
 // layout scaled (step 2.4 adds a device picker).
@@ -17,8 +21,12 @@ export function App() {
   const [sel, setSel] = useState<string | null>(null);
   const [clip, setClip] = useState<m.Button | null>(null);
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
+  const [schemas, setSchemas] = useState<Schemas>({});
 
   useEffect(() => {
+    loadSchemas()
+      .then((l) => setSchemas(bySchemaType(l)))
+      .catch((e) => setMsg({ kind: "err", text: errorText(e) }));
     loadConfig()
       .then((c) => {
         setHist(m.start(c));
@@ -34,6 +42,11 @@ export function App() {
 
   const save = useCallback(async () => {
     if (!cfg) return;
+    const bad = firstProblem(schemas, cfg);
+    if (bad) return setMsg({ kind: "err", text: bad });
+    // A run button can do anything the user can; show the exact lines before they are first saved.
+    const cmds = savedCfg ? m.newRunCommands(savedCfg, cfg) : [];
+    if (cmds.length && !window.confirm(`These commands will run on this computer when their buttons are pressed:\n\n${cmds.join("\n")}\n\nSave?`)) return;
     try {
       await saveConfig(cfg);
       setSaved(cfg);
@@ -41,7 +54,7 @@ export function App() {
     } catch (e) {
       setMsg({ kind: "err", text: errorText(e) });
     }
-  }, [cfg]);
+  }, [cfg, savedCfg, schemas]);
 
   const prof = cfg?.profiles[profile];
   const pg = prof?.pages[page];
@@ -104,10 +117,10 @@ export function App() {
         </p>
       )}
       <main>
-        <Pages cfg={cfg} profile={profile} page={page} setPage={(p) => (setPage(p), setSel(null))} edit={edit} say={setMsg} />
-        <Canvas cfg={cfg} profile={profile} page={page} sel={sel} setSel={setSel} edit={edit} />
+        <Pages cfg={cfg} profile={profile} page={page} setPage={(p) => (setPage(p), setSel(null))} edit={edit} say={setMsg} schemas={schemas} />
+        <Canvas cfg={cfg} profile={profile} page={page} sel={sel} setSel={setSel} edit={edit} schemas={schemas} />
         <aside>
-          <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} />
+          <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} schemas={schemas} />
           <ProfilePanel cfg={cfg} profile={profile} edit={edit} say={setMsg} />
         </aside>
       </main>
@@ -122,6 +135,7 @@ function Pages(p: {
   setPage: (n: string) => void;
   edit: (c: m.Config) => void;
   say: (x: { kind: "err" | "ok"; text: string } | null) => void;
+  schemas: Schemas;
 }) {
   const prof = p.cfg.profiles[p.profile];
   const ask = (q: string, def = "") => window.prompt(q, def)?.trim() ?? null;
@@ -176,19 +190,19 @@ function Pages(p: {
       <h3>Add a button</h3>
       <p className="hint">Drag onto a cell.</p>
       <div className="palette">
-        {m.ACTION_TYPES.map((t) => (
-          <PaletteItem key={t} type={t} />
+        {Object.values(p.schemas).map((x) => (
+          <PaletteItem key={x.type} type={x.type} label={x.label} />
         ))}
       </div>
     </nav>
   );
 }
 
-function PaletteItem({ type }: { type: string }) {
+function PaletteItem({ type, label }: { type: string; label: string }) {
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: `palette:${type}` });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes} className={`chip ${isDragging ? "dragging" : ""}`}>
-      {m.PALETTE_LABELS[type]}
+      {label}
     </div>
   );
 }
@@ -200,6 +214,7 @@ function Canvas(p: {
   sel: string | null;
   setSel: (k: string | null) => void;
   edit: (c: m.Config) => void;
+  schemas: Schemas;
 }) {
   const prof = p.cfg.profiles[p.profile];
   const pg = prof.pages[p.page];
@@ -208,6 +223,18 @@ function Canvas(p: {
   const [err, setErr] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const rects = useMemo(() => cellRects(prof.grid, SCREEN.w, SCREEN.h), [prof.grid]);
+
+  // The screen is drawn at its real size and shrunk to fit the space the window gives it, so the
+  // picture never needs a scroll bar. It is never enlarged: the preview is a bitmap.
+  const wrap = useRef<HTMLElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setScale(Math.min(1, (el.clientWidth - 32) / SCREEN.w)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // The preview is the Go renderer's picture of the unsaved config. Only the newest answer is
   // shown, and edits that follow each other fast are drawn once.
@@ -229,8 +256,9 @@ function Canvas(p: {
     if (!to?.startsWith("cell:")) return;
     const key = to.slice(5);
     if (from.startsWith("palette:")) {
-      const first = Object.keys(prof.pages).find((n) => n !== p.page);
-      p.edit(m.setButton(p.cfg, p.profile, p.page, key, m.newButton(from.slice(8), first)));
+      const type = from.slice(8);
+      const pages = Object.keys(prof.pages).filter((n) => n !== p.page);
+      p.edit(m.setButton(p.cfg, p.profile, p.page, key, { label: p.schemas[type]?.label ?? type, action: blankAction(p.schemas, type, pages) }));
     } else if (from.startsWith("cell:")) {
       p.edit(m.moveButton(p.cfg, p.profile, p.page, from.slice(5), key));
       if (p.sel === from.slice(5)) p.setSel(key);
@@ -241,18 +269,20 @@ function Canvas(p: {
 
   return (
     <DndContext sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={end} onDragCancel={() => setDragId(null)}>
-      <section className="canvas-wrap">
-        <div className="canvas" style={{ width: SCREEN.w, height: SCREEN.h, background: prof.theme.bg }} onClick={() => p.setSel(null)}>
+      <section className="canvas-wrap" ref={wrap}>
+        <div style={{ width: SCREEN.w * scale, height: SCREEN.h * scale }}>
+        <div className="canvas" style={{ width: SCREEN.w, height: SCREEN.h, background: prof.theme.bg, transform: `scale(${scale})`, transformOrigin: "0 0" }} onClick={() => p.setSel(null)}>
           {img && <img src={img} width={SCREEN.w} height={SCREEN.h} draggable={false} alt="" />}
           {rects.map((r, i) => {
             const key = m.cellKey(i % prof.grid.cols, Math.floor(i / prof.grid.cols));
             return <Cell key={key} id={key} rect={r} full={!!pg.buttons[key]} on={p.sel === key} pick={() => p.setSel(key)} />;
           })}
         </div>
+        </div>
         {err && <p className="msg err">{err}</p>}
         <p className="hint">Click a cell to edit it. Drag to move or swap. ⌘C / ⌘V copy and paste, ⌫ clears, ⌘Z undoes.</p>
       </section>
-      <DragOverlay>{dragId?.startsWith("palette:") ? <div className="chip">{m.PALETTE_LABELS[dragId.slice(8)]}</div> : null}</DragOverlay>
+      <DragOverlay>{dragId?.startsWith("palette:") ? <div className="chip">{p.schemas[dragId.slice(8)]?.label}</div> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -272,59 +302,114 @@ function Cell(p: { id: string; rect: { x: number; y: number; w: number; h: numbe
   );
 }
 
-function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: string | null; edit: (c: m.Config) => void }) {
-  const b = p.sel ? p.cfg.profiles[p.profile].pages[p.page].buttons[p.sel] : undefined;
+function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: string | null; edit: (c: m.Config) => void; schemas: Schemas }) {
+  const prof = p.cfg.profiles[p.profile];
+  const b = p.sel ? prof.pages[p.page].buttons[p.sel] : undefined;
+  const [picking, setPicking] = useState(false);
+  const [asJSON, setAsJSON] = useState(false);
   const [json, setJson] = useState("");
   const [bad, setBad] = useState(false);
+  const [test, setTest] = useState<{ kind: "err" | "ok" | "wait"; text: string } | null>(null);
   const actionJSON = b?.action ? JSON.stringify(b.action, null, 2) : "";
-  // The text box follows the button picked, and what the button holds after an undo.
+  // The JSON box follows the button picked, and what the button holds after an undo.
   useEffect(() => (setJson(actionJSON), setBad(false)), [actionJSON, p.sel]);
+  useEffect(() => setTest(null), [p.sel, p.page]);
 
   if (!p.sel) return <section className="panel"><h3>Button</h3><p className="hint">Pick a cell.</p></section>;
-  const set = (patch: Partial<m.Button>) => p.edit(m.setButton(p.cfg, p.profile, p.page, p.sel!, { ...(b ?? {}), ...patch }));
+  const sel = p.sel;
+  const put = (next: m.Button | null) => p.edit(m.setButton(p.cfg, p.profile, p.page, sel, next));
+  const set = (patch: Partial<m.Button>) => put({ ...(b ?? {}), ...patch });
   const setAction = (a: m.Action | undefined) => {
     const next = { ...(b ?? {}) };
     if (a) next.action = a;
     else delete next.action;
-    p.edit(m.setButton(p.cfg, p.profile, p.page, p.sel!, next));
+    put(next);
   };
+  const schema = b?.action ? p.schemas[b.action.type] : undefined;
+  const problems = b?.action ? actionProblems(p.schemas, b.action) : [];
+  const pages = Object.keys(prof.pages).filter((n) => n !== p.page);
+  const userFile = b?.icon && !b.icon.startsWith("lucide:") ? b.icon : "";
+
+  const run = async () => {
+    if (!b?.action) return;
+    setTest({ kind: "wait", text: "Running…" });
+    try {
+      await testAction(b.action);
+      setTest({ kind: "ok", text: "Done." });
+    } catch (e) {
+      setTest({ kind: "err", text: errorText(e) });
+    }
+  };
+
   return (
     <section className="panel">
-      <h3>Button {p.sel}</h3>
+      <h3>Button {sel}</h3>
       <label>
         Label
         <input value={b?.label ?? ""} onChange={(e) => set({ label: e.target.value || undefined })} />
       </label>
       <label>
         Icon
-        <input
-          placeholder="lucide:folder, or a file in icons/"
-          value={b?.icon ?? ""}
-          onChange={(e) => set({ icon: e.target.value || undefined })}
+        <button className="iconbtn" onClick={() => setPicking(true)}>
+          {b?.icon ? b.icon.replace(/^lucide:/, "") : "Choose…"}
+        </button>
+        {userFile && !userFile.match(/\.(png|jpe?g)$/i) && <small className="hint">Emoji are not drawn yet; pick a picture or an icon.</small>}
+      </label>
+      {picking && (
+        <IconPicker
+          value={b?.icon}
+          onClose={() => setPicking(false)}
+          onPick={(icon) => (set({ icon }), setPicking(false))}
         />
-      </label>
-      <label>
-        Action
-        <select
-          value={b?.action?.type ?? ""}
-          onChange={(e) => {
-            const t = e.target.value;
-            if (!t) return setAction(undefined);
-            const first = Object.keys(p.cfg.profiles[p.profile].pages).find((n) => n !== p.page);
-            setAction(m.newButton(t, first).action);
-          }}
-        >
-          <option value="">(none)</option>
-          {m.ACTION_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </label>
-      {b?.action && (
+      )}
+
+      {b?.action ? (
+        <ActionForm
+          schemas={p.schemas}
+          pages={Object.keys(prof.pages)}
+          action={b.action}
+          onChange={setAction}
+          allowNone
+          onNone={() => setAction(undefined)}
+        />
+      ) : (
         <label>
-          Parameters (JSON; real forms come in step 2.3)
+          Action
+          <select value="" onChange={(e) => e.target.value && setAction(blankAction(p.schemas, e.target.value, pages))}>
+            <option value="">(none)</option>
+            {Object.values(p.schemas).map((x) => (
+              <option key={x.type} value={x.type}>
+                {x.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {b?.action?.type === "run" && b.action.command ? (
+        <p className="cmd">{b.action.shell ? `sh -c ${b.action.command}` : [b.action.command, ...((b.action.args as string[]) ?? [])].join(" ")}</p>
+      ) : null}
+      {problems.map((x) => (
+        <p key={x} className="msg err" style={{ cursor: "default" }}>
+          {x}
+        </p>
+      ))}
+
+      <div className="row">
+        {schema?.runnable && (
+          <button disabled={problems.length > 0 || test?.kind === "wait"} onClick={run} title="Runs it now on this computer">
+            Test
+          </button>
+        )}
+        <button onClick={() => put(null)} disabled={!b}>
+          Clear button
+        </button>
+      </div>
+      {test && <p className={`testout ${test.kind === "wait" ? "" : test.kind}`}>{test.text}</p>}
+
+      {b?.action && (
+        <details open={asJSON} onToggle={(e) => setAsJSON(e.currentTarget.open)}>
+          <summary className="hint">Edit as JSON</summary>
           <textarea
             className={bad ? "bad" : ""}
             rows={9}
@@ -342,11 +427,8 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
               }
             }}
           />
-        </label>
+        </details>
       )}
-      <button onClick={() => p.edit(m.setButton(p.cfg, p.profile, p.page, p.sel!, null))} disabled={!b}>
-        Clear button
-      </button>
     </section>
   );
 }

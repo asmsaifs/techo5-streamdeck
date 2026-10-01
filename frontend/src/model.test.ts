@@ -75,3 +75,17 @@ describe("model", () => {
     expect(m.pageNameProblem(p, "new")).toBeNull();
   });
 });
+
+describe("run confirmation", () => {
+  it("lists only the commands the saved config does not already have", () => {
+    const saved = base();
+    saved.profiles.default.pages.home.buttons["2,0"] = { action: { type: "run", command: "say", args: ["hello"] } };
+    const next = structuredClone(saved);
+    next.profiles.default.pages.home.buttons["3,0"] = { action: { type: "run", command: "open", args: ["My File.txt"] } };
+    next.profiles.default.pages.apps.buttons["0,0"] = {
+      action: { type: "toggle", on: { type: "run", command: "ls | wc", shell: true }, off: { type: "delay", ms: 1 } },
+    };
+    expect(m.newRunCommands(saved, next)).toEqual(['open "My File.txt"', "sh: ls | wc"]);
+    expect(m.newRunCommands(next, next)).toEqual([]);
+  });
+});

@@ -31,7 +31,9 @@ type Options struct {
 type Core struct {
 	Store  *store.Store
 	Server *server.Server
-	Dir    string
+	// Actions is the registry the server runs buttons with; the editor's Test button uses it too.
+	Actions *actions.Registry
+	Dir     string
 
 	listen string
 
@@ -62,9 +64,10 @@ func New(o Options) (*Core, error) {
 		sys = actions.DryRun(slog.Default())
 	}
 	c := &Core{Store: st, Dir: dir, listen: o.Listen}
+	c.Actions = actions.New(sys, nil)
 	c.Server = &server.Server{
 		Config:   st.Config,
-		Runner:   actions.New(sys, nil),
+		Runner:   c.Actions,
 		Renderer: render.New(filepath.Join(dir, store.IconsDir)),
 	}
 	c.root, c.stop = context.WithCancel(context.Background())

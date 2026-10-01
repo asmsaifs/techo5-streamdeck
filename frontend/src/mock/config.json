@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "server": { "listen": "0.0.0.0:9555", "key": "example-key-do-not-use-0123" },
+  "devices": { "Kitchen Show": { "profile": "default" } },
+  "profiles": {
+    "default": {
+      "grid": { "cols": 5, "rows": 3, "gap": 8, "radius": 14 },
+      "theme": { "bg": "#101114", "button": "#1d1f24", "text": "#ffffff", "accent": "#4f8cff" },
+      "pages": {
+        "home": {
+          "buttons": {
+            "0,0": { "label": "YouTube", "icon": "lucide:youtube",
+                     "action": { "type": "stream.web", "url": "https://youtube.com", "sound": "show" } },
+            "1,0": { "label": "Mute", "icon": "lucide:mic-off",
+                     "action": { "type": "toggle",
+                                 "on":  { "type": "mic.mute", "mute": true },
+                                 "off": { "type": "mic.mute", "mute": false } } },
+            "2,0": { "label": "Apps", "icon": "lucide:folder", "action": { "type": "page", "page": "apps" } },
+            "4,2": { "label": "Hello", "icon": "👋", "action": { "type": "run", "command": "say", "args": ["hello"] } }
+          }
+        },
+        "apps": {
+          "buttons": {
+            "0,0": { "label": "Safari", "action": { "type": "open.app", "app": "Safari" } },
+            "1,0": { "label": "Spotlight", "action": { "type": "keys", "keys": "Cmd+Space" } }
+          }
+        }
+      }
+    }
+  },
+  "hotkeys": { "CmdOrCtrl+Alt+1": { "profile": "default", "page": "home", "button": "0,0" } }
+}

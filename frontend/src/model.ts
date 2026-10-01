@@ -207,3 +207,31 @@ export function redo(h: History): History {
   if (!h.future.length) return h;
   return { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) };
 }
+
+/** The `run` commands in next that saved does not have, as the exact line each would run. */
+export function newRunCommands(saved: Config, next: Config): string[] {
+  const seen = new Set<string>();
+  const collect = (cfg: Config, into: (line: string, key: string) => void) => {
+    for (const p of Object.values(cfg.profiles)) {
+      for (const pg of Object.values(p.pages)) {
+        for (const b of Object.values(pg.buttons)) {
+          walk(b.action, (a) => {
+            if (a.type !== "run") return;
+            const args = Array.isArray(a.args) ? (a.args as string[]) : [];
+            const line = a.shell ? `sh: ${a.command}` : [a.command, ...args].map((x) => (/\s/.test(String(x)) ? JSON.stringify(x) : x)).join(" ");
+            into(line, JSON.stringify(a));
+          });
+        }
+      }
+    }
+  };
+  collect(saved, (_, key) => seen.add(key));
+  const out: string[] = [];
+  collect(next, (line, key) => {
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(line);
+    }
+  });
+  return out;
+}

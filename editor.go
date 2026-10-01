@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"image/png"
+	"time"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
+	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
@@ -71,3 +76,18 @@ func (e *Editor) Preview(configJSON, profile, page string, w, h int) (string, er
 
 // Devices lists the Shows connected now.
 func (e *Editor) Devices() []server.Info { return e.core.Server.Sessions() }
+
+// Schemas describes the actions the inspector can edit.
+func (e *Editor) Schemas() []actions.Schema { return actions.Schemas() }
+
+// TestAction runs an action now, on this computer, as if its button had been pressed, and reports
+// what went wrong in words fit to show. Only the editor window can call this; a Show cannot.
+func (e *Editor) TestAction(actionJSON string) error {
+	var a deck.Action
+	if err := json.Unmarshal([]byte(actionJSON), &a); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return e.core.Actions.Run(ctx, &a)
+}

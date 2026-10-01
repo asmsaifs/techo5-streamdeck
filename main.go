@@ -67,8 +67,8 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  "TECHO5 Stream Deck",
-		Width:  1100,
-		Height: 720,
+		Width:  1280,
+		Height: 800,
 		Hidden: hidden,
 		URL:    "/",
 	})

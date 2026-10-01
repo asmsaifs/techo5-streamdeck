@@ -139,3 +139,30 @@ func loadImage(path string, size int) (*image.RGBA, error) {
 	xdraw.CatmullRom.Scale(img, at, src, b, draw.Over, nil)
 	return img, nil
 }
+
+// LucideNames lists the bundled line icons as "lucide:name", sorted.
+func LucideNames() []string {
+	ents, _ := lucide.ReadDir("lucide")
+	var out []string
+	for _, e := range ents {
+		if n, ok := strings.CutSuffix(e.Name(), ".svg"); ok {
+			out = append(out, lucidePrefix+n)
+		}
+	}
+	return out
+}
+
+// LucideSVG is the bundled icon name ("lucide:youtube" or "youtube") as a whole SVG that takes the
+// colour of the text around it, for the editor's icon picker. It is empty for an unknown name.
+func LucideSVG(name string) string {
+	name = strings.TrimPrefix(name, lucidePrefix)
+	if name == "" || strings.Trim(name, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
+		return ""
+	}
+	body, err := lucide.ReadFile("lucide/" + name + ".svg")
+	if err != nil {
+		return ""
+	}
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"` +
+		` stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + string(body) + `</svg>`
+}

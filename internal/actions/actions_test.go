@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -310,5 +311,27 @@ func TestChattyCommandIsBounded(t *testing.T) {
 	err := OS().Exec(context.Background(), ExecSpec{Command: "sh", Args: []string{"-c", "yes | head -c 5000000; exit 1"}, Wait: true})
 	if err == nil || len(err.Error()) > 1000 {
 		t.Errorf("error is %d bytes", len(err.Error()))
+	}
+}
+
+func TestSchemasMatchTheRegistry(t *testing.T) {
+	reg := New(DryRun(nil), nil)
+	have := map[string]bool{}
+	for _, s := range Schemas() {
+		if have[s.Type] {
+			t.Errorf("schema for %s twice", s.Type)
+		}
+		have[s.Type] = true
+	}
+	for _, typ := range reg.Types() {
+		if !have[typ] {
+			t.Errorf("action %s has no schema", typ)
+		}
+	}
+	for typ := range have {
+		deckOwn := typ == "page" || typ == "back"
+		if deckOwn == slices.Contains(reg.Types(), typ) {
+			t.Errorf("%s: deck-handled and registered must be opposites", typ)
+		}
 	}
 }

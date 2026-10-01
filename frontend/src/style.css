@@ -5,7 +5,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 13px system-u
 .app { display: flex; flex-direction: column; height: 100vh; }
 header { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); align-items: center; }
 .spacer { flex: 1; }
-main { flex: 1; display: grid; grid-template-columns: 180px minmax(0, 1fr) 260px; min-height: 0; }
+main { flex: 1; display: grid; grid-template-columns: 200px minmax(0, 1fr) 280px; min-height: 0; }
 nav, aside { padding: 12px; overflow: auto; background: var(--panel); }
 nav { border-right: 1px solid var(--line); }
 aside { border-left: 1px solid var(--line); }
@@ -42,3 +42,22 @@ textarea.bad { border-color: var(--err); }
 .cell.on { outline-color: var(--accent); }
 .cell.over { outline-color: var(--ok); background: #2fbf7122; }
 .cell.lifted { opacity: .35; }
+.req { color: var(--err); }
+.check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.check input { margin-top: 2px; }
+small.hint { display: block; }
+fieldset { border: 1px solid var(--line); border-radius: 6px; margin: 8px 0; padding: 4px 8px 8px; }
+legend { color: var(--dim); padding: 0 4px; }
+.step { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; }
+input.bad, select.bad, textarea.bad { border-color: var(--err); }
+.modal { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.dialog { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; width: min(720px, 92vw); max-height: 86vh; overflow: auto; }
+.icons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.icons button { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+.icons button.on { border-color: var(--accent); background: #4f8cff33; }
+.icons .svg svg { width: 24px; height: 24px; display: block; }
+.iconbtn { display: flex; align-items: center; gap: 8px; justify-content: flex-start; }
+.testout { margin: 6px 0 0; padding: 6px 8px; border-radius: 6px; }
+.testout.err { background: #e5484d22; color: #ff9a9d; }
+.testout.ok { background: #2fbf7122; color: #7ee2ad; }
+.cmd { font: 12px ui-monospace, monospace; white-space: pre-wrap; background: var(--bg); padding: 6px 8px; border-radius: 6px; }
