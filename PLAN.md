@@ -576,7 +576,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 4.2 Live view chip + back gesture — "Deck" chip (top left, translucent) for 3 s on open and after a tap in the top 40 px; a tap on it returns to the deck, connection kept; a page that stops shows the problem for 4 s then the deck. No spinner: the pressed deck button stands in until the first picture
 - [x] 4.3 Video mode — `video` flag on `stream.web` and automatic switching in the screen encoder (half size, q70, 25 fps cap); not measured on the real Show
 - [x] 4.4 Warm tabs → **v0.3.0** (not tagged yet, same wait as v0.1.0) — last 2 pages parked 10 min (frozen, stream stopped), memory in the Shows panel. Open: desktop "login window" (sign in by touch for now), Chrome download
-- [ ] 5.1 Protocol extension doc
+- [x] 5.1 Protocol extension doc — docs/protocol.md (`audio1` cap, kinds 4/5/6, timing rules from cast); the wire constants and the device side come with 5.3/5.2
 - [ ] 5.2 Device audio (techo5, OTA)
 - [ ] 5.3 Desktop audio pipeline
 - [ ] 5.4 Website audio capture
