@@ -108,9 +108,11 @@ These change the device's settings and gestures, not the wire.
 - **Own server setting.** The Show has a *Stream Deck* server (address + key; setup page,
   Connections tab, or the `deck_server` action), separate from the dashboard's dashcast server, so
   both can be set. The device's config key is `deck`; an empty address turns the deck off.
-- **Opening.** With a deck server set, a swipe in from the **right** edge opens the deck (the
-  dashboard keeps the left edge, and leaves with it). The drawer, which that swipe opened before,
-  is then a swipe in from the right on the deck itself. `Open sheet` takes `deck` as a name.
+- **Opening.** The swipe in from the **left** edge opens a streamed page. With only the dashboard
+  set up (mode not Off) or only a deck server set, that page opens at once; with both, a narrow
+  card with two buttons, *Dashboard* and *Deck*, asks which (a tap elsewhere, the same swipe again
+  or 5 s without an answer puts it away). The right edge keeps the drawer, on the clock and on both
+  pages. `Open sheet` takes `dashboard` or `deck` as a name and opens that page directly.
 - **Idle.** *Deck when idle* (switch `screen_deck_idle`, or the checkbox on the setup page) shows
   the deck in place of the clock; a dashboard opened by hand wins over it, and it wins over an idle
   dashboard. Putting it away shows the clock for two minutes.

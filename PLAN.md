@@ -467,7 +467,7 @@ control it by touch. Tag `v0.5.0`.
 ### Phase 7 — Device-side polish (techo5 repo, OTA)
 
 - **Separate deck server setting** (`deck_server` + key) so HA dashcast and the deck can coexist;
-  open the deck with a swipe in from the **right** edge (dashboard keeps the left).
+  open the deck from the left-edge swipe: directly when it is the only page set up, through a dashboard-or-deck card when both are (the drawer keeps the right edge).
 - **Discovery**: desktop advertises `_techo5deck._tcp` (TXT: name, version); the Show's settings
   list found decks; key entered on the device setup page (or a 6-digit code the desktop shows,
   confirmed on the device, then the real key is exchanged inside a Noise XXpsk handshake).
@@ -586,7 +586,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [ ] 6.3 Windows helper
 - [ ] 6.4 Linux helper
 - [x] 6.5 AppSource + window picker → **v0.5.0** (not tagged yet, same wait as v0.1.0) — `stream.app` (app substring + title regex, optional launch, sound, scroll mode, video); `internal/sources/app` runs one helper per stream, letterboxes the window (no scaling when it fits) and maps touches back, clipped to the picture; editor field with a window picker (`Windows` binding). Tested with a fake helper, in the server end to end, and the helper by hand; not yet run through the real Show or with the real helper from the Go core, and the scroll chip is a per-button `scroll` flag instead. Windows/Linux helpers (6.3/6.4) still open
-- [x] 7 Device polish (techo5, OTA) — committed in techo5, not released: separate `deck` server + key (setup page, `deck_server` action), swipe in from the right edge opens it (the drawer moves to a right swipe on the deck), *Deck when idle*, offline picture greyed with "Deck offline" and a backoff that restarts after a long connection; desktop announces `_techo5deck._tcp`, the setup page's *Look for decks* lists them. Unit-tested and compiled for linux/arm (the display tests need the Linux CI); not tried on the real Show. Open: pairing code (Noise XXpsk), click sound on press (needs an overlay on the stream's speaker, see docs/protocol.md)
+- [x] 7 Device polish (techo5, OTA) — committed in techo5, not released: separate `deck` server + key (setup page, `deck_server` action), a swipe in from the left edge opens the deck, or a small card asking dashboard or deck when both are set up (the drawer keeps the right edge), *Deck when idle*, offline picture greyed with "Deck offline" and a backoff that restarts after a long connection; desktop announces `_techo5deck._tcp`, the setup page's *Look for decks* lists them. Unit-tested and compiled for linux/arm (the display tests need the Linux CI); not tried on the real Show. Open: pairing code (Noise XXpsk), click sound on press (needs an overlay on the stream's speaker, see docs/protocol.md)
 - [ ] 8 Packaging + CI → **v1.0.0**
 
 ## 8. Open questions to settle early
