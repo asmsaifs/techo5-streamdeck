@@ -20,6 +20,15 @@ export const loadSchemas = () => call<Schema[]>("Schemas");
 /** Hotkeys of the config the system refused, by combo, with the reason. */
 export const hotkeyProblems = () => call<Record<string, string>>("HotkeyProblems");
 export const testAction = (a: unknown) => call<void>("TestAction", JSON.stringify(a));
+export interface AppWindow {
+  id: string;
+  title: string;
+  app: string;
+  w: number;
+  h: number;
+}
+/** The windows a stream.app button can show; rejects with the helper's own words (permission, no helper). */
+export const windows = () => call<AppWindow[]>("Windows");
 export const lucideNames = () => call<string[]>("LucideNames");
 export const lucideSVGs = (names: string[]) => call<Record<string, string>>("LucideSVGs", names);
 export const userIcons = () => call<Record<string, string>>("UserIcons");

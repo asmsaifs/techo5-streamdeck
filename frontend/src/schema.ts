@@ -6,7 +6,7 @@ import type { Action, Config } from "./model";
 export interface Field {
   name: string;
   label: string;
-  kind: "string" | "text" | "number" | "bool" | "tribool" | "enum" | "path" | "keys" | "list" | "page" | "action" | "actions";
+  kind: "string" | "text" | "number" | "bool" | "tribool" | "enum" | "path" | "keys" | "list" | "window" | "page" | "action" | "actions";
   required?: boolean;
   enum?: string[];
   help?: string;

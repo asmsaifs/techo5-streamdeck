@@ -585,7 +585,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 6.2 macOS helper — helpers/mac (Swift package, `deckcap-mac`): list, window capture with the app's sound (Float32 → S16LE), mouse input mapped into the window and clipped, permission events. Checked by hand over stdio: 94 frames in 4 s at 960×640 and 48 kHz stereo audio from a real window. Input posting (Accessibility) not tried; not yet launched by the Go core or bundled in the .app (6.5/8); a closed window is reported through SCStream's stop error only
 - [ ] 6.3 Windows helper
 - [ ] 6.4 Linux helper
-- [ ] 6.5 AppSource + window picker → **v0.5.0**
+- [x] 6.5 AppSource + window picker → **v0.5.0** (not tagged yet, same wait as v0.1.0) — `stream.app` (app substring + title regex, optional launch, sound, scroll mode, video); `internal/sources/app` runs one helper per stream, letterboxes the window (no scaling when it fits) and maps touches back, clipped to the picture; editor field with a window picker (`Windows` binding). Tested with a fake helper, in the server end to end, and the helper by hand; not yet run through the real Show or with the real helper from the Go core, and the scroll chip is a per-button `scroll` flag instead. Windows/Linux helpers (6.3/6.4) still open
 - [ ] 7 Device polish (deck_server, discovery, idle deck)
 - [ ] 8 Packaging + CI → **v1.0.0**
 

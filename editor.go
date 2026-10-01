@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/asmsaifs/techo5-streamdeck/internal/capture"
 	"image"
 	"image/png"
 	"time"
@@ -92,6 +93,14 @@ func (e *Editor) Devices() []server.Info { return e.core.Server.Sessions() }
 // Browsers lists the browsers website tiles run in: their windows, how many are parked, and the
 // memory they hold.
 func (e *Editor) Browsers() []web.BrowserInfo { return e.core.Server.Web.Stats() }
+
+// Windows lists the windows of other apps that a stream.app button can show. It fails with the
+// helper's own words when Screen Recording is not allowed.
+func (e *Editor) Windows() ([]capture.Window, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return e.core.Server.App.Windows(ctx)
+}
 
 // Schemas describes the actions the inspector can edit.
 func (e *Editor) Schemas() []actions.Schema { return actions.Schemas() }

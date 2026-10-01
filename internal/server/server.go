@@ -8,6 +8,7 @@ import (
 	"image"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/screen"
 	"github.com/asmsaifs/techo5-streamdeck/internal/sources"
+	appsrc "github.com/asmsaifs/techo5-streamdeck/internal/sources/app"
 	deckview "github.com/asmsaifs/techo5-streamdeck/internal/sources/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
@@ -34,6 +36,9 @@ type Server struct {
 	Tiles deckview.Tiler
 	// Web runs the browsers of website tiles. May be nil: those buttons then say they cannot.
 	Web *web.Manager
+	// App captures native windows through the platform's capture helper. May be nil: those
+	// buttons then say they cannot.
+	App *appsrc.Manager
 	Log *slog.Logger
 
 	mu       sync.Mutex
@@ -321,13 +326,10 @@ func (s *Server) pump(se *session, src sources.Source, frames <-chan *image.RGBA
 // slow site can take a while; a Show waiting longer than this is told it failed.
 const openTimeout = 45 * time.Second
 
-// stream is a button that shows something other than the deck: it opens it and, once it has
+// stream is a button that shows something other than the deck (a website, an app's window): it opens it and, once it has
 // something to show, the Show is switched to it. It returns when that has happened, or why it
 // could not; the deck's button shows the press meanwhile.
 func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *deck.Action) error {
-	if a.Type != "stream.web" {
-		return fmt.Errorf("%s is not available yet", a.Type)
-	}
 	var p struct {
 		URL     string   `json:"url"`
 		Allow   []string `json:"allow"`
@@ -336,12 +338,26 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 		Sound   string   `json:"sound"`
 		// AVOffsetMs delays the sound to meet a picture that takes this long to arrive.
 		AVOffsetMs int `json:"av_offset_ms"`
+		// For stream.app.
+		App    string `json:"app"`
+		Title  string `json:"title"`
+		Launch bool   `json:"launch"`
+		Scroll bool   `json:"scroll"`
+	}
+	switch a.Type {
+	case "stream.web":
+		if s.Web == nil {
+			return errors.New("websites are not available in this build")
+		}
+	case "stream.app":
+		if s.App == nil {
+			return errors.New("streaming apps is not available in this build")
+		}
+	default:
+		return fmt.Errorf("%s is not available yet", a.Type)
 	}
 	if err := a.Params(&p); err != nil {
 		return fmt.Errorf("bad parameters: %w", err)
-	}
-	if s.Web == nil {
-		return errors.New("websites are not available in this build")
 	}
 	se.cmu.Lock()
 	if se.opening || se.cur != sources.Source(se.deck) {
@@ -352,21 +368,42 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 	se.cmu.Unlock()
 	defer func() { se.cmu.Lock(); se.opening = false; se.cmu.Unlock() }()
 
-	src, err := s.Web.New(web.Spec{URL: p.URL, Allow: p.Allow, Profile: p.Profile, Sound: p.Sound})
-	if err != nil {
-		return err
+	// What is opened, whichever kind: the source, how it ends, and where its sound goes.
+	var (
+		src     sources.Source
+		srcErr  func() error
+		profile string
+		kind    string
+		hook    func(snd *audio.Stream) // connects the source's sound
+	)
+	switch a.Type {
+	case "stream.web":
+		w, err := s.Web.New(web.Spec{URL: p.URL, Allow: p.Allow, Profile: p.Profile, Sound: p.Sound})
+		if err != nil {
+			return err
+		}
+		src, srcErr, profile, kind = w, w.Err, w.Profile(), "web"
+		hook = func(snd *audio.Stream) { w.SetSound(func(pcm []byte) { snd.Write(audio.Wire, pcm) }) }
+	default:
+		ap, err := s.App.New(appsrc.Spec{App: p.App, Title: p.Title, Launch: p.Launch, Scroll: p.Scroll,
+			Sound: p.Sound == "" || p.Sound == "show"})
+		if err != nil {
+			return err
+		}
+		src, srcErr, kind = ap, ap.Err, "app"
+		hook = func(snd *audio.Stream) { ap.SetSound(snd.Write) }
 	}
 	// The source lives until the Show goes back to the deck or the session ends.
 	sctx, cancel := context.WithCancel(ctx)
-	// The page's sound goes to the Show when the tile says so and the Show can play it. Otherwise
-	// the tile still captures it (that is what keeps it off this computer's speakers) and drops it.
+	// The sound goes to the Show when the button says so and the Show can play it. A website
+	// still captures it otherwise (that is what keeps it off this computer's speakers) and drops it.
 	var snd *audio.Stream
 	if p.Sound == "" || p.Sound == web.SoundShow {
 		if se.hello.Has(wire.CapAudio) {
 			snd = audio.New(out, audio.Options{AVOffset: time.Duration(p.AVOffsetMs) * time.Millisecond})
-			src.SetSound(func(pcm []byte) { snd.Write(audio.Wire, pcm) })
+			hook(snd)
 		} else {
-			s.log().Info("this Show cannot play sound: the page's sound is dropped", "name", se.hello.Name)
+			s.log().Info("this Show cannot play sound: the sound is dropped", "name", se.hello.Name)
 		}
 	}
 	if err := src.Start(sctx, image.Pt(se.hello.W, se.hello.H)); err != nil {
@@ -378,12 +415,12 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 	case img, ok := <-src.Frames():
 		if !ok {
 			cancel()
-			return src.Err()
+			return srcErr()
 		}
 		first = img
 	case <-time.After(openTimeout):
 		cancel()
-		return errors.New("the page took too long to open")
+		return errors.New("it took too long to open")
 	case <-ctx.Done():
 		cancel()
 		return ctx.Err()
@@ -392,18 +429,18 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 	// The Show switches to the page: the first picture is sent whole.
 	se.sendMu.Lock()
 	se.cmu.Lock()
-	se.cur, se.kind = src, "web"
+	se.cur, se.kind = src, kind
 	se.cmu.Unlock()
 	se.enc.Invalidate()
 	se.enc.SetVideo(p.Video)
 	s.raiseChip(se)
-	err = se.enc.Send(s.framed(se, first))
+	err := se.enc.Send(s.framed(se, first))
 	se.sendMu.Unlock()
 	if err != nil {
 		cancel()
 		return err
 	}
-	s.log().Info("showing a website", "name", se.hello.Name, "profile", src.Profile(), "sound", snd != nil)
+	s.log().Info("showing a stream", "kind", kind, "name", se.hello.Name, "profile", profile, "sound", snd != nil)
 	if snd != nil {
 		// Started now, not before: the Show would play the page's sound over the deck while it loaded.
 		// What was written meanwhile is at most the latency's worth, the newest.
@@ -422,10 +459,13 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 			return
 		}
 		text := "The page stopped."
-		if err := src.Err(); err != nil {
-			text = "The page stopped: " + err.Error()
+		if kind == "app" {
+			text = "The window stopped."
 		}
-		s.log().Warn("website ended", "name", se.hello.Name, "err", src.Err())
+		if err := srcErr(); err != nil {
+			text = strings.TrimSuffix(text, ".") + ": " + err.Error()
+		}
+		s.log().Warn("stream ended", "kind", kind, "name", se.hello.Name, "err", srcErr())
 		_ = out.Problem(text)
 		select {
 		case <-time.After(4 * time.Second): // long enough to read

@@ -67,3 +67,10 @@ td { padding: 4px 6px; border-top: 1px solid var(--line); }
 .dim { color: var(--dim); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); margin-right: 4px; }
 .dot.on { background: var(--ok); }
+
+.row { display: flex; gap: 6px; }
+.row input { flex: 1; }
+.winlist { max-height: 180px; overflow: auto; margin: 4px 0; }
+.winlist button { width: 100%; text-align: left; margin-bottom: 2px; }
+.winlist small { color: var(--dim); margin-left: 6px; }
+small.bad { color: #ff6b6b; }

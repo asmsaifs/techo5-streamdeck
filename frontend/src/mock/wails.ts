@@ -35,6 +35,7 @@ const handlers: Record<string, (...a: any[]) => unknown> = {
   Save: (j: string) => void (cfg = JSON.parse(j)),
   Schemas: () => schemas,
   HotkeyProblems: () => ({}),
+  Windows: () => [{ id: "1", app: "Spotify", title: "Spotify Premium", w: 1200, h: 800 }, { id: "2", app: "Notes", title: "Todo", w: 700, h: 500 }],
   FrontApp: () => ({ Name: "Safari", ID: "com.apple.Safari" }),
   Secrets: () => ({ HomeAssistantToken: false, OBSPassword: false }),
   SetSecret: () => undefined,

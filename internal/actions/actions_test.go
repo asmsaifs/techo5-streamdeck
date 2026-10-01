@@ -334,7 +334,7 @@ func TestSchemasMatchTheRegistry(t *testing.T) {
 		}
 	}
 	for typ := range have {
-		deckOwn := typ == "page" || typ == "back" || typ == "stream.web"
+		deckOwn := typ == "page" || typ == "back" || typ == "stream.web" || typ == "stream.app"
 		if deckOwn == slices.Contains(reg.Types(), typ) {
 			t.Errorf("%s: deck-handled and registered must be opposites", typ)
 		}

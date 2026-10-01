@@ -4,6 +4,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
+	appsrc "github.com/asmsaifs/techo5-streamdeck/internal/sources/app"
 	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
@@ -90,6 +92,7 @@ func New(o Options) (*Core, error) {
 		Runner:   c.Actions,
 		Renderer: render.New(filepath.Join(dir, store.IconsDir)),
 		Web:      web.NewManager(filepath.Join(dir, "chrome-profiles")),
+		App:      &appsrc.Manager{Launch: c.launchApp},
 	}
 	env := tiles.OSEnv(c.Actions.HAState)
 	if o.DryRun {
@@ -173,8 +176,8 @@ func (c *Core) Press(ctx context.Context, profile, page, button string) error {
 	switch b.Action.Type {
 	case "page", "back":
 		return fmt.Errorf("%s is a %s button, which moves around on a Show's screen", cell, b.Action.Type)
-	case "stream.web":
-		return fmt.Errorf("%s is a %s button, which puts a website on a Show's screen", cell, b.Action.Type)
+	case "stream.web", "stream.app":
+		return fmt.Errorf("%s is a %s button, which puts something on a Show's screen", cell, b.Action.Type)
 	}
 	ctx, cancel := context.WithTimeout(actions.WithButton(ctx, actions.ButtonKey(profile, page, cell)), 10*time.Minute)
 	defer cancel()
@@ -182,6 +185,12 @@ func (c *Core) Press(ctx context.Context, profile, page, button string) error {
 	// A toggle's ring on a Show follows the state, which this press may have changed.
 	c.Server.Reload()
 	return err
+}
+
+// launchApp starts an application for a stream.app button that asks for it.
+func (c *Core) launchApp(ctx context.Context, app string) error {
+	raw, _ := json.Marshal(map[string]string{"type": "open.app", "app": app})
+	return c.Actions.Run(ctx, &deck.Action{Type: "open.app", Raw: raw})
 }
 
 // Trigger presses the button an id names. The id is either a hotkey of the config, "Alt+1", or

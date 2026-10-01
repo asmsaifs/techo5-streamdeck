@@ -213,6 +213,27 @@ func validateAction(path string, a *Action, p *Profile, add func(path, format st
 		if v.AVOffsetMs < 0 || v.AVOffsetMs > 1000 {
 			add(path+".av_offset_ms", "must be between 0 and 1000")
 		}
+	case "stream.app":
+		var v struct {
+			App   string `json:"app"`
+			Title string `json:"title"`
+			Sound string `json:"sound"`
+			Offs  int    `json:"av_offset_ms"`
+		}
+		if a.Params(&v) != nil || (strings.TrimSpace(v.App) == "" && strings.TrimSpace(v.Title) == "") {
+			add(path+".app", "name an app or a window title")
+		}
+		if v.Title != "" {
+			if _, err := regexp.Compile("(?i)" + v.Title); err != nil {
+				add(path+".title", "%q is not a regular expression", v.Title)
+			}
+		}
+		if v.Sound != "" && v.Sound != "show" && v.Sound != "off" {
+			add(path+".sound", "%q is not show or off", v.Sound)
+		}
+		if v.Offs < 0 || v.Offs > 1000 {
+			add(path+".av_offset_ms", "must be between 0 and 1000")
+		}
 	case "toggle":
 		var v struct {
 			On  *Action `json:"on"`

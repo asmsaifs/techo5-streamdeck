@@ -158,6 +158,14 @@ func TestValidate(t *testing.T) {
 			[]string{"profiles.default.pages.home.buttons.1,0.action.url: is missing",
 				`profiles.default.pages.home.buttons.2,0.action.url: "example.com" is not an http:// or https:// address`,
 				`profiles.default.pages.home.buttons.3,0.action.url: "file:///etc/passwd" is not an http:// or https:// address`}},
+		{"app windows", `{"default":{"pages":{"home":{"buttons":{
+			"0,0":{"action":{"type":"stream.app","app":"Spotify"}},
+			"1,0":{"action":{"type":"stream.app"}},
+			"2,0":{"action":{"type":"stream.app","title":"("}},
+			"3,0":{"action":{"type":"stream.app","app":"x","sound":"desktop"}}}}}}}`,
+			[]string{"profiles.default.pages.home.buttons.1,0.action.app: name an app or a window title",
+				`profiles.default.pages.home.buttons.2,0.action.title: "(" is not a regular expression`,
+				`profiles.default.pages.home.buttons.3,0.action.sound: "desktop" is not show or off`}},
 		{"tiles", `{"default":{"pages":{"home":{"buttons":{
 			"0,0":{"tile":{"type":"clock","format":"sundial"}},
 			"1,0":{"tile":{"type":"ha_state","entity":"Sensor Kitchen"}},

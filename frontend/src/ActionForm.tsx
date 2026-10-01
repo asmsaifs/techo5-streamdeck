@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { errorText, windows } from "./api";
+import type { AppWindow } from "./api";
 import { comboOf } from "./keys";
 import type { Action } from "./model";
 import type { Field, Schemas } from "./schema";
@@ -186,6 +188,8 @@ function FieldInput({ f, ctx, value, set }: { f: Field; ctx: Ctx; value: unknown
         </fieldset>
       );
     }
+    case "window":
+      return <WindowInput label={label} help={help} miss={!!miss} value={String(value ?? "")} set={set} />;
     default:
       // string and path
       return (
@@ -196,6 +200,52 @@ function FieldInput({ f, ctx, value, set }: { f: Field; ctx: Ctx; value: unknown
         </label>
       );
   }
+}
+
+/** An app name that can be typed or picked from the windows open now (asked of the capture helper). */
+export function WindowInput(p: { label: React.ReactNode; help: React.ReactNode; miss: boolean; value: string; set: (v: unknown) => void }) {
+  const [list, setList] = useState<AppWindow[] | null>(null);
+  const [err, setErr] = useState("");
+  const load = () => {
+    setErr("");
+    windows().then(setList, (e) => {
+      setList(null);
+      setErr(errorText(e));
+    });
+  };
+  return (
+    <div>
+      <label>
+        {p.label}
+        <span className="row">
+          <input className={p.miss ? "bad" : ""} spellCheck={false} value={p.value} onChange={(e) => p.set(e.target.value)} />
+          <button type="button" onClick={load}>
+            Pick…
+          </button>
+        </span>
+        {p.help}
+      </label>
+      {err && <small className="hint bad">{err}</small>}
+      {list && (
+        <ul className="winlist">
+          {list.length === 0 && <li className="hint">No windows are open.</li>}
+          {list.map((w) => (
+            <li key={w.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  p.set(w.app);
+                  setList(null);
+                }}
+              >
+                <b>{w.app}</b> {w.title} <small>{w.w}×{w.h}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 /** A box that records the combination pressed in it, and can still be typed into by hand. */
