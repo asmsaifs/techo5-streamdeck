@@ -25,6 +25,9 @@ export function App() {
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
   const [schemas, setSchemas] = useState<Schemas>({});
   const [showDevices, setShowDevices] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const onDrop = useRef<(e: DragEndEvent) => void>(() => {});
   // What the system refused of the saved hotkeys, by combo.
   const [hkProblems, setHkProblems] = useState<Record<string, string>>({});
   const loadHkProblems = useCallback(() => {
@@ -154,14 +157,19 @@ export function App() {
           {msg.text}
         </p>
       )}
-      <main>
-        <Pages cfg={cfg} profile={profile} page={page} setPage={(p) => (setPage(p), setSel(null))} edit={edit} say={setMsg} schemas={schemas} />
-        <Canvas cfg={cfg} profile={profile} page={page} sel={sel} setSel={setSel} edit={edit} schemas={schemas} />
-        <aside>
-          <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} schemas={schemas} hkProblems={hkProblems} />
-          <ProfilePanel cfg={cfg} profile={profile} edit={edit} say={setMsg} />
-        </aside>
-      </main>
+      {/* One drag context for the palette (in Pages) and the cells (in Canvas): a button dragged from
+          the palette must be able to land on a cell. The canvas says what a drop means. */}
+      <DndContext sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={(e) => (setDragId(null), onDrop.current(e))} onDragCancel={() => setDragId(null)}>
+        <main>
+          <Pages cfg={cfg} profile={profile} page={page} setPage={(p) => (setPage(p), setSel(null))} edit={edit} say={setMsg} schemas={schemas} />
+          <Canvas cfg={cfg} profile={profile} page={page} sel={sel} setSel={setSel} edit={edit} schemas={schemas} onDrop={onDrop} />
+          <aside>
+            <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} schemas={schemas} hkProblems={hkProblems} />
+            <ProfilePanel cfg={cfg} profile={profile} edit={edit} say={setMsg} />
+          </aside>
+        </main>
+        <DragOverlay>{dragId?.startsWith("palette:") ? <div className="chip">{schemas[dragId.slice(8)]?.label}</div> : null}</DragOverlay>
+      </DndContext>
     </div>
   );
 }
@@ -253,13 +261,12 @@ function Canvas(p: {
   setSel: (k: string | null) => void;
   edit: (c: m.Config) => void;
   schemas: Schemas;
+  onDrop: { current: (e: DragEndEvent) => void };
 }) {
   const prof = p.cfg.profiles[p.profile];
   const pg = prof.pages[p.page];
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [img, setImg] = useState<string>("");
   const [err, setErr] = useState("");
-  const [dragId, setDragId] = useState<string | null>(null);
   const rects = useMemo(() => cellRects(prof.grid, SCREEN.w, SCREEN.h), [prof.grid]);
 
   // The screen is drawn at its real size and shrunk to fit the space the window gives it, so the
@@ -287,8 +294,7 @@ function Canvas(p: {
     return () => clearTimeout(t);
   }, [p.cfg, p.profile, p.page]);
 
-  const end = (e: DragEndEvent) => {
-    setDragId(null);
+  p.onDrop.current = (e: DragEndEvent) => {
     const from = String(e.active.id);
     const to = e.over ? String(e.over.id) : null;
     if (!to?.startsWith("cell:")) return;
@@ -306,7 +312,7 @@ function Canvas(p: {
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={(e) => setDragId(String(e.active.id))} onDragEnd={end} onDragCancel={() => setDragId(null)}>
+    <>
       <section className="canvas-wrap" ref={wrap}>
         <div style={{ width: SCREEN.w * scale, height: SCREEN.h * scale }}>
         <div className="canvas" style={{ width: SCREEN.w, height: SCREEN.h, background: prof.theme.bg, transform: `scale(${scale})`, transformOrigin: "0 0" }} onClick={() => p.setSel(null)}>
@@ -320,8 +326,7 @@ function Canvas(p: {
         {err && <p className="msg err">{err}</p>}
         <p className="hint">Click a cell to edit it. Drag to move or swap. ⌘C / ⌘V copy and paste, ⌫ clears, ⌘Z undoes.</p>
       </section>
-      <DragOverlay>{dragId?.startsWith("palette:") ? <div className="chip">{p.schemas[dragId.slice(8)]?.label}</div> : null}</DragOverlay>
-    </DndContext>
+    </>
   );
 }
 
