@@ -563,7 +563,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 1.3 Screen pipeline
 - [x] 1.4 Server + DeckSource — checked with fakeshow and in tests; real Show check open (as 0.3)
 - [x] 1.5 First actions → **v0.1.0** (not tagged yet: waiting for the real Show check from 0.3/1.4)
-- [ ] 2.1 Wails shell + tray
+- [x] 2.1 Wails shell + tray — serves the deck and quits cleanly (smoke-tested); tray menu, hide-on-close and start-at-login need a hands-on check
 - [ ] 2.2 Grid editor
 - [ ] 2.3 Inspector + icon picker
 - [ ] 2.4 Devices + settings → **v0.2.0**
