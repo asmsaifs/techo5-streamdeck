@@ -1,8 +1,13 @@
 package core
 
 import (
+	"context"
 	"net"
+	"strings"
 	"testing"
+
+	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
+	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 )
 
 func TestPauseAndResume(t *testing.T) {
@@ -65,5 +70,80 @@ func TestRebind(t *testing.T) {
 	// A free one is taken.
 	if err := c.Rebind("127.0.0.1:0"); err != nil || !c.Running() {
 		t.Fatalf("rebind: %v running=%v", err, c.Running())
+	}
+}
+
+// recSys records what the actions did to the computer.
+type recSys struct{ opened []string }
+
+func (r *recSys) Open(_ context.Context, _ actions.OpenKind, target string) error {
+	r.opened = append(r.opened, target)
+	return nil
+}
+func (*recSys) Keys(context.Context, actions.Combo) error    { return nil }
+func (*recSys) Type(context.Context, string) error           { return nil }
+func (*recSys) Exec(context.Context, actions.ExecSpec) error { return nil }
+
+func TestTriggerPressesConfiguredButtonsOnly(t *testing.T) {
+	c, err := New(Options{Dir: t.TempDir(), Listen: "127.0.0.1:0", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	sys := &recSys{}
+	c.Actions = actions.New(sys, nil)
+
+	cfg := c.Store.Config()
+	home := cfg.Profiles["default"].Pages["home"]
+	home.Buttons["0,0"] = &deck.Button{Action: &deck.Action{Type: "open.url", Raw: []byte(`{"type":"open.url","url":"https://example.com"}`)}}
+	home.Buttons["1,0"] = &deck.Button{Action: &deck.Action{Type: "page", Raw: []byte(`{"type":"page","page":"home"}`)}}
+	home.Buttons["2,0"] = &deck.Button{Label: "no action"}
+	cfg.Hotkeys = map[string]deck.HotkeyTarget{"CmdOrCtrl+Alt+1": {Profile: "default", Page: "home", Button: "0,0"}}
+
+	tests := []struct {
+		id      string
+		wantErr string // a part of the error, or "" for success
+	}{
+		{"CmdOrCtrl+Alt+1", ""},
+		{"cmdorctrl+alt+1", ""},
+		{"default/home/0,0", ""},
+		{"  default/home/0,0 \n", ""},
+		{"default/home/1,0", "moves around"},
+		{"default/home/2,0", "no button with an action"},
+		{"default/home/9,9", "no button with an action"},
+		{"default/gone/0,0", `no page "gone"`},
+		{"nobody/home/0,0", `no profile "nobody"`},
+		{"Alt+7", "neither a hotkey"},
+		{"default/home/x", "not a cell"},
+	}
+	for _, tt := range tests {
+		before := len(sys.opened)
+		err := c.Trigger(context.Background(), tt.id)
+		switch {
+		case tt.wantErr == "" && err != nil:
+			t.Errorf("Trigger(%q) = %v", tt.id, err)
+		case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+			t.Errorf("Trigger(%q) = %v, want an error with %q", tt.id, err, tt.wantErr)
+		}
+		if ran := len(sys.opened) - before; (tt.wantErr == "") != (ran == 1) {
+			t.Errorf("Trigger(%q) ran the action %d times", tt.id, ran)
+		}
+	}
+}
+
+func TestOnReloadFiresNowAndOnReload(t *testing.T) {
+	c, err := New(Options{Dir: t.TempDir(), Listen: "127.0.0.1:0", DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	n := 0
+	c.OnReload(func(*deck.Config) { n++ })
+	if n != 1 {
+		t.Fatalf("OnReload called fn %d times at once, want 1", n)
+	}
+	c.Reload()
+	if n != 2 {
+		t.Errorf("fn ran %d times after a Reload, want 2", n)
 	}
 }

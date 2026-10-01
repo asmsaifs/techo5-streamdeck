@@ -1,8 +1,8 @@
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActionForm } from "./ActionForm";
-import { errorText, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
+import { ActionForm, KeysInput } from "./ActionForm";
+import { errorText, hotkeyProblems, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
 import { DevicesPanel } from "./DevicesPanel";
 import { IconPicker } from "./IconPicker";
 import { cellRects } from "./layout";
@@ -24,6 +24,12 @@ export function App() {
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
   const [schemas, setSchemas] = useState<Schemas>({});
   const [showDevices, setShowDevices] = useState(false);
+  // What the system refused of the saved hotkeys, by combo.
+  const [hkProblems, setHkProblems] = useState<Record<string, string>>({});
+  const loadHkProblems = useCallback(() => {
+    // Registering happens a moment after the save, off the save's own call.
+    setTimeout(() => hotkeyProblems().then(setHkProblems).catch(() => {}), 300);
+  }, []);
 
   useEffect(() => {
     loadSchemas()
@@ -34,6 +40,7 @@ export function App() {
         setHist(m.start(c));
         setSaved(c);
         setProfile(c.profiles.default ? "default" : Object.keys(c.profiles)[0]);
+        loadHkProblems();
       })
       .catch((e) => setMsg({ kind: "err", text: errorText(e) }));
   }, []);
@@ -52,11 +59,12 @@ export function App() {
     try {
       await saveConfig(cfg);
       setSaved(cfg);
+      loadHkProblems();
       setMsg({ kind: "ok", text: "Saved. The Show is updated." });
     } catch (e) {
       setMsg({ kind: "err", text: errorText(e) });
     }
-  }, [cfg, savedCfg, schemas]);
+  }, [cfg, savedCfg, schemas, loadHkProblems]);
 
   const prof = cfg?.profiles[profile];
   const pg = prof?.pages[page];
@@ -149,7 +157,7 @@ export function App() {
         <Pages cfg={cfg} profile={profile} page={page} setPage={(p) => (setPage(p), setSel(null))} edit={edit} say={setMsg} schemas={schemas} />
         <Canvas cfg={cfg} profile={profile} page={page} sel={sel} setSel={setSel} edit={edit} schemas={schemas} />
         <aside>
-          <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} schemas={schemas} />
+          <Inspector cfg={cfg} profile={profile} page={page} sel={sel} edit={edit} schemas={schemas} hkProblems={hkProblems} />
           <ProfilePanel cfg={cfg} profile={profile} edit={edit} say={setMsg} />
         </aside>
       </main>
@@ -331,10 +339,11 @@ function Cell(p: { id: string; rect: { x: number; y: number; w: number; h: numbe
   );
 }
 
-function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: string | null; edit: (c: m.Config) => void; schemas: Schemas }) {
+function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: string | null; edit: (c: m.Config) => void; schemas: Schemas; hkProblems: Record<string, string> }) {
   const prof = p.cfg.profiles[p.profile];
   const b = p.sel ? prof.pages[p.page].buttons[p.sel] : undefined;
   const [picking, setPicking] = useState(false);
+  const [moved, setMoved] = useState<string | null>(null);
   const [asJSON, setAsJSON] = useState(false);
   const [json, setJson] = useState("");
   const [bad, setBad] = useState(false);
@@ -342,7 +351,7 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
   const actionJSON = b?.action ? JSON.stringify(b.action, null, 2) : "";
   // The JSON box follows the button picked, and what the button holds after an undo.
   useEffect(() => (setJson(actionJSON), setBad(false)), [actionJSON, p.sel]);
-  useEffect(() => setTest(null), [p.sel, p.page]);
+  useEffect(() => (setTest(null), setMoved(null)), [p.sel, p.page]);
 
   if (!p.sel) return <section className="panel"><h3>Button</h3><p className="hint">Pick a cell.</p></section>;
   const sel = p.sel;
@@ -358,6 +367,9 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
   const problems = b?.action ? actionProblems(p.schemas, b.action) : [];
   const pages = Object.keys(prof.pages).filter((n) => n !== p.page);
   const userFile = b?.icon && !b.icon.startsWith("lucide:") ? b.icon : "";
+  // Folders and Back move around on a Show's screen, so a hotkey cannot press them.
+  const hotkeyable = !!b?.action && b.action.type !== "page" && b.action.type !== "back";
+  const hotkey = m.hotkeyOf(p.cfg, p.profile, p.page, sel) ?? "";
 
   const run = async () => {
     if (!b?.action) return;
@@ -418,6 +430,24 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
       {b?.action?.type === "run" && b.action.command ? (
         <p className="cmd">{b.action.shell ? `sh -c ${b.action.command}` : [b.action.command, ...((b.action.args as string[]) ?? [])].join(" ")}</p>
       ) : null}
+      {hotkeyable && (
+        <>
+          <KeysInput
+            label="Global hotkey"
+            miss={false}
+            value={hotkey}
+            set={(v) => {
+              const combo = String(v).trim() || null;
+              const from = combo ? m.hotkeyTakenBy(p.cfg, combo, p.profile, p.page, sel) : null;
+              setMoved(from ? `${combo} was on ${from}; it is on this button now.` : null);
+              p.edit(m.setHotkey(p.cfg, p.profile, p.page, sel, combo));
+            }}
+            help={<small className="hint">Presses this button from anywhere on this computer. Leave empty for none.</small>}
+          />
+          {hotkey && p.hkProblems[hotkey] && <p className="msg err" style={{ cursor: "default" }}>{p.hkProblems[hotkey]}</p>}
+        </>
+      )}
+      {moved && <p className="hint">{moved}</p>}
       {problems.map((x) => (
         <p key={x} className="msg err" style={{ cursor: "default" }}>
           {x}

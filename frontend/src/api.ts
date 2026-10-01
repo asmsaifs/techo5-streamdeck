@@ -17,6 +17,8 @@ export const errorText = (e: unknown) => (e instanceof Error ? e.message : Strin
 import type { Schema } from "./schema";
 
 export const loadSchemas = () => call<Schema[]>("Schemas");
+/** Hotkeys of the config the system refused, by combo, with the reason. */
+export const hotkeyProblems = () => call<Record<string, string>>("HotkeyProblems");
 export const testAction = (a: unknown) => call<void>("TestAction", JSON.stringify(a));
 export const lucideNames = () => call<string[]>("LucideNames");
 export const lucideSVGs = (names: string[]) => call<Record<string, string>>("LucideSVGs", names);

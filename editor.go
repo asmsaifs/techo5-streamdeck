@@ -14,13 +14,22 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
 
 // Editor is what the editor window can call. It is thin on purpose: the model, the checks and
 // the drawing all live in internal/, so the preview is the very picture the Show gets.
-type Editor struct{ core *core.Core }
+type Editor struct {
+	core *core.Core
+	hot  *hotkeys.Manager
+}
+
+// HotkeyProblems is what the system refused of the config's hotkeys, by combo: another program
+// owns it, or it is not a combo the system can register. The editor shows these next to the
+// button.
+func (e *Editor) HotkeyProblems() map[string]string { return e.hot.Status() }
 
 // Config is config.json as the editor shows it: the last good config, as JSON text.
 func (e *Editor) Config() (string, error) {
@@ -40,7 +49,7 @@ func (e *Editor) Save(configJSON string) error {
 		return err
 	}
 	// Save marks the file as already seen, so the watcher stays quiet about our own write.
-	e.core.Server.Reload()
+	e.core.Reload()
 	return nil
 }
 

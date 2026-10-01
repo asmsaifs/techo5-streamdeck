@@ -35,7 +35,14 @@ export interface Config {
   server: { listen: string; key: string };
   devices?: Record<string, { profile: string }>;
   profiles: Record<string, Profile>;
-  hotkeys?: Record<string, unknown>;
+  hotkeys?: Record<string, HotkeyTarget>;
+}
+
+/** The button a global hotkey presses. */
+export interface HotkeyTarget {
+  profile: string;
+  page: string;
+  button: string;
 }
 
 export const HOME = "home";
@@ -59,16 +66,18 @@ function editPage(cfg: Config, profile: string, page: string, fn: (p: Page) => v
 }
 
 export function setButton(cfg: Config, profile: string, page: string, key: string, b: Button | null): Config {
-  return editPage(cfg, profile, page, (pg) => {
+  const next = editPage(cfg, profile, page, (pg) => {
     if (b) pg.buttons[key] = clone(b);
     else delete pg.buttons[key];
   });
+  // A hotkey for a button that is gone would make the config invalid.
+  return b ? next : retarget(next, (t) => (t.profile === profile && t.page === page && t.button === key ? null : t));
 }
 
 /** Moves the button at `from` to `to`; if `to` has one, they swap. */
 export function moveButton(cfg: Config, profile: string, page: string, from: string, to: string): Config {
   if (from === to) return cfg;
-  return editPage(cfg, profile, page, (pg) => {
+  const next = editPage(cfg, profile, page, (pg) => {
     const a = pg.buttons[from];
     const b = pg.buttons[to];
     if (a) pg.buttons[to] = a;
@@ -76,6 +85,50 @@ export function moveButton(cfg: Config, profile: string, page: string, from: str
     if (b) pg.buttons[from] = b;
     else delete pg.buttons[from];
   });
+  // A hotkey follows its button to where it went.
+  return retarget(next, (t) => {
+    if (t.profile !== profile || t.page !== page) return t;
+    if (t.button === from) return { ...t, button: to };
+    if (t.button === to) return { ...t, button: from };
+    return t;
+  });
+}
+
+/** Rewrites every hotkey's target through fn, which returns the new one or null to drop it. */
+function retarget(cfg: Config, fn: (t: HotkeyTarget) => HotkeyTarget | null): Config {
+  if (!cfg.hotkeys) return cfg;
+  const out: Record<string, HotkeyTarget> = {};
+  for (const [combo, t] of Object.entries(cfg.hotkeys)) {
+    const n = fn(t);
+    if (n) out[combo] = n;
+  }
+  const { hotkeys: _old, ...rest } = cfg;
+  return Object.keys(out).length ? { ...rest, hotkeys: out } : rest;
+}
+
+/** The global hotkey of a button, or undefined. */
+export function hotkeyOf(cfg: Config, profile: string, page: string, key: string): string | undefined {
+  return Object.entries(cfg.hotkeys ?? {}).find(([, t]) => t.profile === profile && t.page === page && t.button === key)?.[0];
+}
+
+/** Gives a button the global hotkey `combo`, or none for null. A button has at most one; a combo
+ * belongs to one button, so it is taken from whichever had it. */
+export function setHotkey(cfg: Config, profile: string, page: string, key: string, combo: string | null): Config {
+  const mine = (t: HotkeyTarget) => t.profile === profile && t.page === page && t.button === key;
+  const next = clone(cfg);
+  const kept: Record<string, HotkeyTarget> = {};
+  for (const [c, t] of Object.entries(next.hotkeys ?? {})) if (!mine(t) && c !== combo) kept[c] = t;
+  if (combo) kept[combo] = { profile, page, button: key };
+  if (Object.keys(kept).length) next.hotkeys = kept;
+  else delete next.hotkeys;
+  return next;
+}
+
+/** Who already has `combo`, as "profile / page / cell", when it is not the given button. */
+export function hotkeyTakenBy(cfg: Config, combo: string, profile: string, page: string, key: string): string | null {
+  const t = cfg.hotkeys?.[combo];
+  if (!t || (t.profile === profile && t.page === page && t.button === key)) return null;
+  return `${t.profile} / ${t.page} / ${t.button}`;
 }
 
 /** A new button for an action type dropped from the palette. */
@@ -164,7 +217,7 @@ export function renamePage(cfg: Config, profile: string, from: string, to: strin
       });
     }
   }
-  return next;
+  return retarget(next, (t) => (t.profile === profile && t.page === from ? { ...t, page: to } : t));
 }
 
 /** Why a page cannot be deleted, or null when it can. */
@@ -178,7 +231,7 @@ export function deleteBlocker(p: Profile, page: string): string | null {
 export function deletePage(cfg: Config, profile: string, page: string): Config {
   const next = clone(cfg);
   delete next.profiles[profile].pages[page];
-  return next;
+  return retarget(next, (t) => (t.profile === profile && t.page === page ? null : t));
 }
 
 /** The page name problem for a new or renamed page, or null. */
@@ -272,7 +325,7 @@ export function profileUsers(cfg: Config, profile: string): string[] {
 export function deleteProfile(cfg: Config, profile: string): Config {
   const next = clone(cfg);
   delete next.profiles[profile];
-  return next;
+  return retarget(next, (t) => (t.profile === profile ? null : t));
 }
 
 /** Why a profile cannot be deleted, or null when it can. */

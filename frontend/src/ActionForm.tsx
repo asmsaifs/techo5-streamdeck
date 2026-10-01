@@ -187,7 +187,7 @@ function FieldInput({ f, ctx, value, set }: { f: Field; ctx: Ctx; value: unknown
 }
 
 /** A box that records the combination pressed in it, and can still be typed into by hand. */
-function KeysInput(p: { label: React.ReactNode; help: React.ReactNode; miss: boolean; value: string; set: (v: unknown) => void }) {
+export function KeysInput(p: { label: React.ReactNode; help: React.ReactNode; miss: boolean; value: string; set: (v: unknown) => void }) {
   const [rec, setRec] = useState(false);
   return (
     <label>

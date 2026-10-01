@@ -34,3 +34,23 @@ tap, not held while touching.
 
 macOS only: every action above through `decksrv -dry-run`, and `run` for real in tests. Real key and
 text injection, and the Windows and Linux openers, are untested on a real machine.
+
+## Global hotkeys and `trigger`
+
+A button can have a **global hotkey**: set it in the editor's inspector ("Global hotkey", press the
+keys to record). It is stored in `config.json` under `hotkeys`, by combo, and presses the button
+from anywhere on the computer, as if it had been tapped on the Show. Folder and Back buttons cannot
+have one: they only move around on a Show's screen.
+
+The system may refuse a combo (another program owns it; a key it cannot register). The editor
+shows the reason under the field after saving.
+
+`techo5-streamdeck trigger <id>` does the same from a terminal, a script, or a desktop's own
+shortcut settings (use it where global hotkeys are not available, such as Wayland without the
+GlobalShortcuts portal). The id is a hotkey of the config (`CmdOrCtrl+Alt+1`, any letter case) or
+`profile/page/col,row` (`default/home/0,0`). It talks to the running app over `control.sock` in the
+config folder (mode 0600) and exits 1 with the app's reason if the press failed. Like a Show, it
+can press only buttons the config has.
+
+Manual check (needs a person at the screen): save a hotkey for an "Open site" button, press it
+with another app in front; run `techo5-streamdeck trigger default/home/0,0` from a terminal.

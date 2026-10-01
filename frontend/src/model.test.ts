@@ -111,3 +111,42 @@ describe("profiles and devices", () => {
     expect(m.rate({ t: 0, bytes: 900, frames: 9 }, { t: 1000, bytes: 10, frames: 1 })).toEqual({ kbps: 0, fps: 0 });
   });
 });
+
+describe("global hotkeys", () => {
+  const withKey = () => m.setHotkey(base(), "default", "home", "1,0", "CmdOrCtrl+Alt+1");
+
+  it("gives a button one hotkey, and a combo one button", () => {
+    const c = withKey();
+    expect(m.hotkeyOf(c, "default", "home", "1,0")).toBe("CmdOrCtrl+Alt+1");
+    // Another combo replaces the first; the same combo on another button moves it there.
+    const again = m.setHotkey(c, "default", "home", "1,0", "Alt+2");
+    expect(Object.keys(again.hotkeys!)).toEqual(["Alt+2"]);
+    const stolen = m.setHotkey(c, "default", "home", "0,0", "CmdOrCtrl+Alt+1");
+    expect(m.hotkeyOf(stolen, "default", "home", "1,0")).toBeUndefined();
+    expect(m.hotkeyOf(stolen, "default", "home", "0,0")).toBe("CmdOrCtrl+Alt+1");
+    expect(m.hotkeyTakenBy(c, "CmdOrCtrl+Alt+1", "default", "home", "0,0")).toBe("default / home / 1,0");
+    expect(m.hotkeyTakenBy(c, "CmdOrCtrl+Alt+1", "default", "home", "1,0")).toBeNull();
+    expect(base().hotkeys).toBeUndefined();
+  });
+
+  it("removing the hotkey leaves no empty section", () => {
+    expect(m.setHotkey(withKey(), "default", "home", "1,0", null).hotkeys).toBeUndefined();
+  });
+
+  it("follows its button when moved or swapped, and goes when the button does", () => {
+    const moved = m.moveButton(withKey(), "default", "home", "1,0", "2,2");
+    expect(moved.hotkeys!["CmdOrCtrl+Alt+1"].button).toBe("2,2");
+    const swapped = m.moveButton(withKey(), "default", "home", "0,0", "1,0");
+    expect(swapped.hotkeys!["CmdOrCtrl+Alt+1"].button).toBe("0,0");
+    expect(m.setButton(withKey(), "default", "home", "1,0", null).hotkeys).toBeUndefined();
+  });
+
+  it("follows a renamed page and goes with a deleted page or profile", () => {
+    const c = m.setHotkey(base(), "default", "apps", "0,0", "Alt+9");
+    expect(m.renamePage(c, "default", "apps", "tools").hotkeys!["Alt+9"].page).toBe("tools");
+    expect(m.deletePage(c, "default", "apps").hotkeys).toBeUndefined();
+    const two = m.addProfile(c, "kids", "default");
+    expect(m.deleteProfile(m.setHotkey(two, "kids", "home", "1,0", "Alt+8"), "kids").hotkeys!["Alt+9"]).toBeDefined();
+    expect(m.deleteProfile(m.setHotkey(two, "kids", "home", "1,0", "Alt+8"), "kids").hotkeys!["Alt+8"]).toBeUndefined();
+  });
+});

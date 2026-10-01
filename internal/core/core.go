@@ -5,12 +5,16 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
+	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
@@ -43,6 +47,8 @@ type Core struct {
 	addr   net.Addr
 	root   context.Context
 	stop   context.CancelFunc
+
+	onReload []func(*deck.Config)
 }
 
 // New opens the config and prepares the server; nothing listens until Start.
@@ -77,13 +83,94 @@ func New(o Options) (*Core, error) {
 			return
 		}
 		slog.Info("config.json reloaded")
-		c.Server.Reload()
+		c.Reload()
 	})
 	if err != nil {
 		c.stop()
 		return nil, err
 	}
+	// The socket is a convenience: an app that cannot open it (a second instance, a folder path
+	// too long for a socket) still serves the deck.
+	if err := control.Listen(c.root, dir, c.Trigger); err != nil {
+		slog.Warn("the trigger socket is not available", "err", err)
+	}
 	return c, nil
+}
+
+// OnReload calls fn with the config now and again each time it changes, whether the file was
+// edited or the editor saved it. fn runs on the goroutine that noticed the change.
+func (c *Core) OnReload(fn func(*deck.Config)) {
+	c.mu.Lock()
+	c.onReload = append(c.onReload, fn)
+	c.mu.Unlock()
+	fn(c.Store.Config())
+}
+
+// Reload tells everything that depends on the config that it changed: the decks on connected
+// Shows are redrawn and the OnReload callbacks run.
+func (c *Core) Reload() {
+	c.Server.Reload()
+	c.mu.Lock()
+	fns := make([]func(*deck.Config), len(c.onReload))
+	copy(fns, c.onReload)
+	c.mu.Unlock()
+	cfg := c.Store.Config()
+	for _, fn := range fns {
+		fn(cfg)
+	}
+}
+
+// Press runs the action of one button as if it had been tapped on a Show, from this computer: a
+// hotkey or the trigger command. Navigation is the Show's own screen and means nothing here.
+func (c *Core) Press(ctx context.Context, profile, page, button string) error {
+	cfg := c.Store.Config()
+	p := cfg.Profiles[profile]
+	if p == nil {
+		return fmt.Errorf("there is no profile %q", profile)
+	}
+	pg := p.Pages[page]
+	if pg == nil {
+		return fmt.Errorf("profile %q has no page %q", profile, page)
+	}
+	cell, err := deck.ParseCell(button)
+	if err != nil {
+		return err
+	}
+	b := pg.Buttons[cell.String()]
+	if b == nil || b.Action == nil {
+		return fmt.Errorf("page %q has no button with an action at %s", page, cell)
+	}
+	switch b.Action.Type {
+	case "page", "back":
+		return fmt.Errorf("%s is a %s button, which moves around on a Show's screen", cell, b.Action.Type)
+	}
+	ctx, cancel := context.WithTimeout(actions.WithButton(ctx, actions.ButtonKey(profile, page, cell)), 10*time.Minute)
+	defer cancel()
+	err = c.Actions.Run(ctx, b.Action)
+	// A toggle's ring on a Show follows the state, which this press may have changed.
+	c.Server.Reload()
+	return err
+}
+
+// Trigger presses the button an id names. The id is either a hotkey of the config, "Alt+1", or
+// "profile/page/col,row". Only buttons the config has can be named: this is what a hotkey and the
+// trigger command share, and neither can carry an action of its own.
+func (c *Core) Trigger(ctx context.Context, id string) error {
+	id = strings.TrimSpace(id)
+	cfg := c.Store.Config()
+	if t, ok := cfg.Hotkeys[id]; ok {
+		return c.Press(ctx, t.Profile, t.Page, t.Button)
+	}
+	for accel, t := range cfg.Hotkeys { // "cmdorctrl+alt+1" for "CmdOrCtrl+Alt+1"
+		if strings.EqualFold(accel, id) {
+			return c.Press(ctx, t.Profile, t.Page, t.Button)
+		}
+	}
+	parts := strings.Split(id, "/")
+	if len(parts) != 3 {
+		return fmt.Errorf("%q is neither a hotkey of the config nor profile/page/col,row", id)
+	}
+	return c.Press(ctx, parts[0], parts[1], parts[2])
 }
 
 // Start listens and serves Shows. It returns once the listener is up, so a bind error is

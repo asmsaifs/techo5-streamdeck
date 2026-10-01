@@ -32,6 +32,7 @@ const handlers: Record<string, (...a: any[]) => unknown> = {
   Config: () => JSON.stringify(cfg),
   Save: (j: string) => void (cfg = JSON.parse(j)),
   Schemas: () => schemas,
+  HotkeyProblems: () => ({}),
   TestAction: () => undefined,
   LucideNames: () => Array.from({ length: 300 }, (_, i) => `lucide:icon-${i}`),
   LucideSVGs: (names: string[]) => Object.fromEntries(names.map((n, i) => [n, icon(String(4 + (i % 8)))])),

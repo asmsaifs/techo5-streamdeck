@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -11,13 +12,18 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/icons"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
+	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
+	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
 
 // The editor UI, built by "npm run build" in frontend/. dist/ holds only a .gitkeep until then, so
@@ -27,6 +33,9 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "trigger" {
+		os.Exit(trigger(os.Args[2:]))
+	}
 	dir := flag.String("dir", "", "the config folder (default: techo5-streamdeck in the user config folder)")
 	listen := flag.String("listen", "", "address to listen on (default: the config's server.listen)")
 	dry := flag.Bool("dry-run", false, "log what actions would do instead of doing it")
@@ -55,15 +64,30 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		slog.Error("the deck server could not start", "err", err)
 	}
 
+	// The hotkeys are registered with the system once the app runs (Wails binds them then), and
+	// kept in step with the config after that. press finds the button in the config as it is when
+	// the key is hit.
+	var hot *hotkeys.Manager
+	press := func(accel string) {
+		if err := c.Trigger(context.Background(), accel); err != nil {
+			slog.Warn("hotkey", "hotkey", accel, "err", err)
+		}
+	}
+	editor := &Editor{core: c}
+
 	app := application.New(application.Options{
 		Name:     "TECHO5 Stream Deck",
-		Services: []application.Service{application.NewService(&Editor{core: c})},
+		Services: []application.Service{application.NewService(editor)},
 		Assets:   application.AssetOptions{Handler: application.BundledAssetFileServer(ui)},
 		Mac: application.MacOptions{
 			// A tray app: no Dock icon.
 			ActivationPolicy: application.ActivationPolicyAccessory,
 		},
 	})
+
+	hot = hotkeys.New(app.GlobalShortcut, press, nil)
+	editor.hot = hot
+	defer hot.Close()
 
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  "TECHO5 Stream Deck",
@@ -122,6 +146,8 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		if on, err := app.Autostart.IsEnabled(); err == nil {
 			login.SetChecked(on)
 		}
+		// Off this goroutine: registering asks the main thread, which may be the one running us.
+		go c.OnReload(func(cfg *deck.Config) { hot.Sync(cfg.Hotkeys) })
 		slog.Info("started", "config", c.Store.Path(), "listening", c.Running())
 		if quit > 0 {
 			time.AfterFunc(quit, app.Quit)
@@ -133,6 +159,33 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		return err
 	}
 	return nil
+}
+
+// trigger is "techo5-streamdeck trigger [-dir d] <id>": it presses a button of the running app. The
+// id is a hotkey of the config, "Alt+1", or "profile/page/col,row". It returns the exit status.
+func trigger(args []string) int {
+	fs := flag.NewFlagSet("trigger", flag.ContinueOnError)
+	dir := fs.String("dir", "", "the config folder of the running app (default: techo5-streamdeck in the user config folder)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "usage: techo5-streamdeck trigger [-dir folder] <hotkey | profile/page/col,row>")
+		return 2
+	}
+	d := *dir
+	if d == "" {
+		var err error
+		if d, err = store.Dir(); err != nil {
+			fmt.Fprintln(os.Stderr, "techo5-streamdeck:", err)
+			return 1
+		}
+	}
+	if err := control.Send(d, strings.Join(fs.Args(), " ")); err != nil {
+		fmt.Fprintln(os.Stderr, "techo5-streamdeck:", err)
+		return 1
+	}
+	return 0
 }
 
 func showEditor(win *application.WebviewWindow) {
