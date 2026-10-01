@@ -553,7 +553,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 0.1 Repo + CLAUDE.md
 - [x] 0.2 Port the wire
 - [ ] 0.3 decksrv hello-world on the Show
-- [ ] 0.4 fakeshow simulator
+- [x] 0.4 fakeshow simulator
 - [ ] 0.5 Spikes (Wails/hotkeys, web audio, ScreenCaptureKit)
 - [ ] 1.1 Model + store
 - [ ] 1.2 Renderer
