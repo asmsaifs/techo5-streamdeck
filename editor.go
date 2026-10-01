@@ -66,10 +66,13 @@ func (e *Editor) Preview(configJSON, profile, page string, w, h int) (string, er
 	}
 	c := e.core.Store.Config()
 	if configJSON != "" {
+		// A draft, not a config to save: a button that is not finished (an app not chosen yet)
+		// still has to be drawn, so it is read without the checks Save makes.
 		var err error
-		if c, err = store.Parse([]byte(configJSON)); err != nil {
+		if c, err = deck.Decode([]byte(configJSON)); err != nil {
 			return "", err
 		}
+		c.Fill()
 	}
 	p := c.Profiles[profile]
 	if p == nil {

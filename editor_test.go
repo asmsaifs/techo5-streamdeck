@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net"
 	"strings"
 	"testing"
@@ -96,5 +97,20 @@ func TestSettingsAndKey(t *testing.T) {
 	}
 	if got := e.Settings().Listen; got != free {
 		t.Fatalf("listen not saved: %q", got)
+	}
+}
+
+// A button that is not finished is still drawn: the preview is of a draft, and only Save checks.
+func TestPreviewDrawsAnUnfinishedButton(t *testing.T) {
+	e := newEditor(t)
+	c := e.core.Store.Config()
+	b, _ := json.Marshal(c)
+	var doc map[string]any
+	json.Unmarshal(b, &doc)
+	page := doc["profiles"].(map[string]any)["default"].(map[string]any)["pages"].(map[string]any)["home"].(map[string]any)
+	page["buttons"] = map[string]any{"1,0": map[string]any{"label": "Notes", "action": map[string]any{"type": "stream.app"}}}
+	b, _ = json.Marshal(doc)
+	if _, err := e.Preview(string(b), "default", "home", 960, 480); err != nil {
+		t.Fatalf("preview of an unfinished button: %v", err)
 	}
 }
