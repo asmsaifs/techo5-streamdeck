@@ -11,6 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-vgo/robotgo v1.1.0
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
+	github.com/jezek/xgb v1.3.1
 	github.com/libp2p/zeroconf/v2 v2.2.0
 	github.com/shirou/gopsutil/v4 v4.26.6
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
@@ -40,7 +41,6 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
-	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/jezek/xgbutil v0.0.0-20260124183602-9fd151d6a51a // indirect
 	github.com/jfreymuth/pulse v0.1.3 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15 // indirect
