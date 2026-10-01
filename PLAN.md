@@ -582,7 +582,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 5.4 Website audio capture — `sound` (show/desktop/off) and `av_offset_ms` on `stream.web`; in-page tab capture on every OS (macOS tested with Chrome 154 and on the wire through the server); YouTube heard on the real Show (2026-10-01; CSP fallback to a ScriptProcessorNode); no Windows/Linux/DRM check
 - [x] 5.5 fakeshow audio → **v0.4.0** (not tagged yet, same wait as v0.1.0 for the OTA release of the device side) — ebiten's audio (oto) plays kinds 4-6 from a queue that places chunks as the device does (clock offset, latency, late drop); `-shot -listen` prints the numbers; no drift correction
 - [x] 6.1 Helper protocol — docs/helpers.md; `internal/capture` spawns a helper, reads frames/audio/events, `List`/`Start`/`Input`/`Stop`, restarts with backoff and replays the last `start`, gives up after 5 failures; tested against a fake helper. Differs from the sketch in 6.1: audio is unstamped (the core's `internal/audio` stamps), frames are raw BGRA, input also has `wheel`
-- [ ] 6.2 macOS helper
+- [x] 6.2 macOS helper — helpers/mac (Swift package, `deckcap-mac`): list, window capture with the app's sound (Float32 → S16LE), mouse input mapped into the window and clipped, permission events. Checked by hand over stdio: 94 frames in 4 s at 960×640 and 48 kHz stereo audio from a real window. Input posting (Accessibility) not tried; not yet launched by the Go core or bundled in the .app (6.5/8); a closed window is reported through SCStream's stop error only
 - [ ] 6.3 Windows helper
 - [ ] 6.4 Linux helper
 - [ ] 6.5 AppSource + window picker → **v0.5.0**
