@@ -73,6 +73,10 @@ cast protocol, the device only needs the *difference* between the clocks: arriva
 the smallest of the last ten (the network only adds delay). Before the first clock message nothing
 can be placed and the device drops audio, so **the server sends a clock message first**.
 
+The device takes the speaker when the first audio chunk arrives (replaying the last clock message,
+aged by the time since) and lets it go after 3 s without audio, so a deck, or a page that is silent,
+never holds it. Clock messages alone do not.
+
 **kindAudio (4)** is one chunk of at most 20 ms: 960 stereo frames = 3840 bytes of PCM after the
 8-byte stamp. The stamp is the moment the chunk is to be heard, on the server's monotonic clock.
 The device presents it at `stamp + offset + latency_ms`.
@@ -111,9 +115,6 @@ setting, default 0) so that picture and sound meet. The device needs to know not
 - `cmd/fakeshow` plays kinds 4/5 in step 5.5.
 
 ## Open
-
-- The device holds the speaker from the first clock message until the connection ends, also
-  after the Show goes back to the deck. It should let go after a few seconds without audio.
 
 - The device side (5.2) is where the exact player hook-up lives; if it needs a different chunk
   size, change it here first.

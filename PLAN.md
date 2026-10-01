@@ -577,9 +577,9 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 4.3 Video mode — `video` flag on `stream.web` and automatic switching in the screen encoder (half size, q70, 25 fps cap); not measured on the real Show
 - [x] 4.4 Warm tabs → **v0.3.0** (not tagged yet, same wait as v0.1.0) — last 2 pages parked 10 min (frozen, stream stopped), memory in the Shows panel. Open: desktop "login window" (sign in by touch for now), Chrome download
 - [x] 5.1 Protocol extension doc — docs/protocol.md (`audio1` cap, kinds 4/5/6, timing rules from cast); the wire constants and the device side come with 5.3/5.2
-- [x] 5.2 Device audio (techo5, OTA) — committed in techo5, not released: the dashboard stream advertises `audio1` and plays kinds 4-6 through `cast.Playback`; unit-tested with a fake output, not heard on the real Show; nothing sends audio until 5.3/5.4
+- [x] 5.2 Device audio (techo5, OTA) — committed in techo5, not released: the dashboard stream advertises `audio1` and plays kinds 4-6 through `cast.Playback`; releases the speaker 3 s after the audio stops; unit-tested, and heard on the real Show (v0.10.4-rc.1 by hand over ssh, 2026-10-01); not yet released over OTA
 - [x] 5.3 Desktop audio pipeline — wire kinds 4-6 with the cap guard, `internal/audio` (resampler, 20 ms chunker, stamps, clock, stall jump, drop-oldest); unit-tested, not connected to a source yet (5.4)
-- [x] 5.4 Website audio capture — `sound` (show/desktop/off) and `av_offset_ms` on `stream.web`; in-page tab capture on every OS (macOS tested with Chrome 154 and on the wire through the server); not heard on the real Show, no Windows/Linux/DRM check
+- [x] 5.4 Website audio capture — `sound` (show/desktop/off) and `av_offset_ms` on `stream.web`; in-page tab capture on every OS (macOS tested with Chrome 154 and on the wire through the server); YouTube heard on the real Show (2026-10-01; CSP fallback to a ScriptProcessorNode); no Windows/Linux/DRM check
 - [ ] 5.5 fakeshow audio → **v0.4.0**
 - [ ] 6.1 Helper protocol
 - [ ] 6.2 macOS helper
