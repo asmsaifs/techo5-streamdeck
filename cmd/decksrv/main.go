@@ -9,17 +9,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 
-	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
-	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
-	"github.com/asmsaifs/techo5-streamdeck/internal/render"
-	"github.com/asmsaifs/techo5-streamdeck/internal/server"
-	"github.com/asmsaifs/techo5-streamdeck/internal/store"
+	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 )
 
 func main() {
@@ -34,60 +28,24 @@ func main() {
 }
 
 func run(dir, listen string, dry bool) error {
-	if dir == "" {
-		d, err := store.Dir()
-		if err != nil {
-			return err
-		}
-		dir = d
-	}
-	st, err := store.Open(dir)
+	c, err := core.New(core.Options{Dir: dir, Listen: listen, DryRun: dry})
 	if err != nil {
 		return err
-	}
-	cfg := st.Config()
-	if listen == "" {
-		listen = cfg.Server.Listen
-	}
-	ln, err := net.Listen("tcp", listen)
-	if err != nil {
-		return err
-	}
-	_, port, _ := net.SplitHostPort(ln.Addr().String())
-	fmt.Println("config:", st.Path())
-	fmt.Println("On the Show: Dashboard server =", lanIP()+":"+port)
-	fmt.Println("              key              =", cfg.Server.Key)
-	fmt.Println("              Dashboard        = Streamed, then swipe in from the left edge")
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	var sys actions.System = actions.OS()
-	if dry {
-		sys = actions.DryRun(slog.Default())
-		fmt.Println("dry run: actions are logged, not performed")
-	}
-	srv := &server.Server{Config: st.Config, Runner: actions.New(sys, nil), Renderer: render.New(filepath.Join(dir, store.IconsDir))}
-	err = st.Watch(ctx, func(c *deck.Config, err error) {
-		if err != nil {
-			slog.Warn("config.json is broken; keeping the last good one", "err", err)
-			return
-		}
-		slog.Info("config.json reloaded")
-		srv.Reload()
-	})
-	if err != nil {
-		return err
-	}
-	return srv.Serve(ctx, ln)
-}
-
-// lanIP is this computer's address on the LAN, as a guess for the instructions: the source address
-// of a route out. Nothing is sent.
-func lanIP() string {
-	c, err := net.Dial("udp", "192.0.2.1:9") // TEST-NET-1: never reached, only routed
-	if err != nil {
-		return "<this computer's IP>"
 	}
 	defer c.Close()
-	return c.LocalAddr().(*net.UDPAddr).IP.String()
+	if err := c.Start(); err != nil {
+		return err
+	}
+	_, port, _ := net.SplitHostPort(c.Addr().String())
+	fmt.Println("config:", c.Store.Path())
+	fmt.Println("On the Show: Dashboard server =", core.LANIP()+":"+port)
+	fmt.Println("              key              =", c.Store.Config().Server.Key)
+	fmt.Println("              Dashboard        = Streamed, then swipe in from the left edge")
+	if dry {
+		fmt.Println("dry run: actions are logged, not performed")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	<-ctx.Done()
+	return nil
 }
