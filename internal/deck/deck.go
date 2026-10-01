@@ -23,6 +23,15 @@ type Config struct {
 	Devices  map[string]Device       `json:"devices,omitempty"` // by the name a Show sends in its hello
 	Profiles map[string]*Profile     `json:"profiles"`
 	Hotkeys  map[string]HotkeyTarget `json:"hotkeys,omitempty"` // by accelerator, "CmdOrCtrl+Alt+1"
+	// Integrations is where the ha.service and obs actions connect. The tokens and passwords are
+	// not here: they are in the OS keychain (internal/secrets).
+	Integrations *Integrations `json:"integrations,omitempty"`
+}
+
+// Integrations are the addresses of the services the actions talk to.
+type Integrations struct {
+	HomeAssistant string `json:"homeassistant,omitempty"` // base URL, "http://homeassistant.local:8123"
+	OBS           string `json:"obs,omitempty"`           // "host:port" of OBS's WebSocket server, usually localhost:4455
 }
 
 // Server is where the deck listens and the key a Show must have.

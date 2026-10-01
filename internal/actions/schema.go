@@ -58,6 +58,28 @@ func Schemas() []Schema {
 		{Type: "lock", Label: "Lock screen", Group: "System", Runnable: true},
 		{Type: "sleep", Label: "Sleep", Group: "System", Runnable: true},
 		{Type: "screenshot", Label: "Screenshot", Group: "System", Runnable: true, Help: "Saves a picture of the screen to the Desktop (Pictures on Linux); on Windows it opens the Snipping Tool."},
+		{Type: "http", Label: "Web request", Group: "Web", Runnable: true,
+			Help: "Sends one request, like a webhook. It worked if the answer is not an error.",
+			Fields: []Field{
+				{Name: "method", Label: "Method", Kind: "enum", Enum: []string{"GET", "POST", "PUT", "PATCH", "DELETE"}, Help: "GET if empty"},
+				{Name: "url", Label: "URL", Kind: "string", Required: true, Help: "http:// or https://"},
+				{Name: "headers", Label: "Headers", Kind: "list", Help: "One per line, Name: value"},
+				{Name: "body", Label: "Body", Kind: "text"},
+				{Name: "timeout", Label: "Timeout (s)", Kind: "number", Min: num(1), Max: num(120), Help: "10 if empty"},
+			}},
+		{Type: "ha.service", Label: "Home Assistant service", Group: "Web", Runnable: true,
+			Help: "Calls a service. The address is in Settings and the token is kept in the system keychain.",
+			Fields: []Field{
+				{Name: "service", Label: "Service", Kind: "string", Required: true, Help: "Like light.toggle"},
+				{Name: "entity", Label: "Entity", Kind: "string", Help: "Like light.kitchen"},
+				{Name: "data", Label: "More data", Kind: "text", Help: "A JSON object, like {\"brightness\": 120}"},
+			}},
+		{Type: "obs", Label: "OBS", Group: "Web", Runnable: true,
+			Help: "Controls OBS Studio over its WebSocket server (Tools > WebSocket Server Settings). The address is in Settings.",
+			Fields: []Field{
+				{Name: "command", Label: "Command", Kind: "enum", Required: true, Enum: []string{"scene", "record.toggle", "record.start", "record.stop", "stream.toggle", "stream.start", "stream.stop", "input.mute.toggle"}},
+				{Name: "name", Label: "Scene or input", Kind: "string", Help: "For scene and input.mute.toggle"},
+			}},
 		{Type: "run", Label: "Run command", Group: "Scripts", Runnable: true,
 			Help: "Runs a program with arguments. Nothing in an argument is reinterpreted unless Shell is on.",
 			Fields: []Field{

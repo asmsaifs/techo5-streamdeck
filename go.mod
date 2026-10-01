@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
 	github.com/chromedp/chromedp v0.16.0
+	github.com/coder/websocket v1.8.14
 	github.com/flynn/noise v1.1.0
 	github.com/fogleman/gg v1.3.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -13,13 +14,15 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/wailsapp/wails/v3 v3.0.0-beta.26
+	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/image v0.46.0
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.6.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20260526185140-fb298caac7ca // indirect
 	github.com/ebitengine/gomobile v0.0.0-20260820040257-d11f821a26a6 // indirect
 	github.com/ebitengine/hideconsole v1.0.0 // indirect

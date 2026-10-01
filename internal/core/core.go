@@ -17,6 +17,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
+	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
@@ -37,6 +38,8 @@ type Core struct {
 	Server *server.Server
 	// Actions is the registry the server runs buttons with; the editor's Test button uses it too.
 	Actions *actions.Registry
+	// Secrets holds the Home Assistant token and the OBS password, in the OS keychain.
+	Secrets secrets.Store
 	Dir     string
 
 	listen string
@@ -71,6 +74,9 @@ func New(o Options) (*Core, error) {
 	}
 	c := &Core{Store: st, Dir: dir, listen: o.Listen}
 	c.Actions = actions.New(sys, nil)
+	c.Secrets = secrets.Keyring()
+	c.Actions.Secrets = c.Secrets
+	c.Actions.Integrations = func() *deck.Integrations { return c.Store.Config().Integrations }
 	c.Server = &server.Server{
 		Config:   st.Config,
 		Runner:   c.Actions,

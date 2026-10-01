@@ -15,6 +15,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
+	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
@@ -99,4 +100,34 @@ func (e *Editor) TestAction(actionJSON string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	return e.core.Actions.Run(ctx, &a)
+}
+
+// SecretStatus says which secrets are set. The values themselves never come back to the window.
+type SecretStatus struct {
+	HomeAssistantToken bool
+	OBSPassword        bool
+}
+
+var secretNames = map[string]string{"homeassistant": secrets.HomeAssistantToken, "obs": secrets.OBSPassword}
+
+// Secrets reports which of the integrations' secrets are in the keychain.
+func (e *Editor) Secrets() SecretStatus {
+	has := func(n string) bool { _, err := e.core.Secrets.Get(n); return err == nil }
+	return SecretStatus{HomeAssistantToken: has(secrets.HomeAssistantToken), OBSPassword: has(secrets.OBSPassword)}
+}
+
+// SetSecret puts the token ("homeassistant") or password ("obs") in the keychain; an empty value
+// removes it. It takes effect at once and is not part of the config the editor saves.
+func (e *Editor) SetSecret(which, value string) error {
+	name, ok := secretNames[which]
+	if !ok {
+		return fmt.Errorf("there is no secret %q", which)
+	}
+	if value == "" {
+		return e.core.Secrets.Delete(name)
+	}
+	if err := e.core.Secrets.Set(name, value); err != nil {
+		return fmt.Errorf("the system keychain refused it: %w", err)
+	}
+	return nil
 }

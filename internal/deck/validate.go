@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -61,6 +62,19 @@ func (c *Config) Validate() error {
 	}
 	if err := wire.CheckKey(c.Server.Key); err != nil {
 		add("server.key", "%v", err)
+	}
+
+	if in := c.Integrations; in != nil {
+		if u := strings.TrimSpace(in.HomeAssistant); u != "" {
+			if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
+				add("integrations.homeassistant", "%q is not an http:// or https:// address", u)
+			}
+		}
+		if a := strings.TrimSpace(in.OBS); a != "" {
+			if _, port, err := net.SplitHostPort(a); err != nil || port == "" {
+				add("integrations.obs", "%q is not host:port, like localhost:4455", a)
+			}
+		}
 	}
 
 	if len(c.Profiles) == 0 {

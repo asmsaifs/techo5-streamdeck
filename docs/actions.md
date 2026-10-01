@@ -20,6 +20,9 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 | `mic.mute` | `mute` (as above) | macOS has no input mute: it sets the input level to 0 and puts the old level back. Linux `wpctl`/`pactl`. **Not on Windows yet** (needs the Core Audio API). |
 | `lock`, `sleep` | | macOS lock presses Ctrl+Cmd+Q (Accessibility), sleep is `pmset sleepnow`. Windows `rundll32`. Linux `loginctl lock-session`, `systemctl suspend`. |
 | `screenshot` | | Saves a PNG to the Desktop (macOS) or Pictures (Linux: grim, gnome-screenshot, spectacle or scrot). Windows opens the Snipping Tool (Win+Shift+S). |
+| `http` | `method` (GET), `url`, `headers` ("Name: value" each), `body`, `timeout` (s, 10) | A webhook. Only http and https. Worked if the status is below 400; the start of the reply is the error otherwise. A failing request never puts the URL's query (where keys often are) in the log. |
+| `ha.service` | `service` ("light.toggle"), `entity`, `data` (a JSON object) | POSTs to Home Assistant's `/api/services/<domain>/<service>`. The address is in Settings > Integrations, the long-lived token is in the system keychain. |
+| `obs` | `command` (`scene`, `record.toggle/start/stop`, `stream.toggle/start/stop`, `input.mute.toggle`), `name` (scene or input) | OBS Studio's WebSocket v5 server (built in since OBS 28; Tools > WebSocket Server Settings). Address in Settings, password (if OBS has one) in the keychain. Connects for each press. |
 | `delay` | `ms` | 0 to 60000. For use in `multi`. |
 | `multi` | `steps` | Runs the steps in order and stops at the first that fails. |
 | `toggle` | `on`, `off` | Runs `on` when off and `off` when on; flips only if it worked. The deck ringed in the accent colour when on. Starts off and does not look at the computer, so it is out of step if the thing is changed another way. |
@@ -68,3 +71,12 @@ On each OS press the button from the editor's Test and see it work: play/pause w
 open, next/previous, volume up/down/set 30, mute and unmute, mic mute and unmute (check in the
 system's sound settings), screenshot file appears, and last lock and sleep. Checked so far: macOS
 volume read/up/down against the real system; everything else only by tests of the commands.
+
+### Integrations and secrets
+
+`config.json` holds the Home Assistant and OBS **addresses** (`integrations`). The **token and
+password** are in the OS keychain (service `techo5-streamdeck`: Keychain, Credential Manager, or
+the Secret Service on Linux), are set from Settings > Integrations, and never come back to the
+window or the config. With `-dry-run` these three actions only log. Checked for real so far: a
+webhook to a local server and the macOS keychain; OBS and Home Assistant are tested against fake
+servers (OBS's password hash is checked against the protocol document's example).

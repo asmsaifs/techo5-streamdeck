@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Device, Settings } from "./api";
 import { devices, errorText, regenerateKey, setListen, settings } from "./api";
+import { secretStatus, setSecret } from "./api";
+import type { SecretStatus } from "./api";
 import * as m from "./model";
 
 type Say = (x: { kind: "err" | "ok"; text: string } | null) => void;
@@ -152,7 +154,55 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
             </button>
           </>
         )}
+
+        <Integrations cfg={p.cfg} edit={p.edit} say={p.say} />
       </div>
     </div>
+  );
+}
+
+/** The addresses of Home Assistant and OBS (part of the config, saved with it), and their token
+ * and password (kept in the system keychain at once, and never shown again). */
+function Integrations(p: { cfg: m.Config; edit: (c: m.Config) => void; say: Say }) {
+  const [st, setSt] = useState<SecretStatus | null>(null);
+  const [token, setToken] = useState("");
+  const [pw, setPw] = useState("");
+  const load = useCallback(() => void secretStatus().then(setSt).catch(() => {}), []);
+  useEffect(load, [load]);
+  const keep = (which: "homeassistant" | "obs", value: string, clear: () => void) =>
+    setSecret(which, value)
+      .then(() => (clear(), load(), p.say({ kind: "ok", text: value ? "Kept in the system keychain." : "Removed from the keychain." })))
+      .catch((e) => p.say({ kind: "err", text: errorText(e) }));
+  const inn = p.cfg.integrations ?? {};
+
+  return (
+    <>
+      <h3>Integrations</h3>
+      <label>
+        Home Assistant address
+        <input spellCheck={false} placeholder="http://homeassistant.local:8123" value={inn.homeassistant ?? ""} onChange={(e) => p.edit(m.setIntegration(p.cfg, "homeassistant", e.target.value))} />
+      </label>
+      <label>
+        Long-lived access token {st?.HomeAssistantToken && <small className="hint">(one is kept)</small>}
+        <div className="row">
+          <input style={{ flex: 1 }} type="password" autoComplete="off" value={token} placeholder={st?.HomeAssistantToken ? "enter a new one to replace it" : "from your Home Assistant profile"} onChange={(e) => setToken(e.target.value)} />
+          <button disabled={!token} onClick={() => keep("homeassistant", token, () => setToken(""))}>Keep</button>
+          <button disabled={!st?.HomeAssistantToken} onClick={() => keep("homeassistant", "", () => setToken(""))}>Remove</button>
+        </div>
+      </label>
+      <label>
+        OBS address
+        <input spellCheck={false} placeholder="localhost:4455" value={inn.obs ?? ""} onChange={(e) => p.edit(m.setIntegration(p.cfg, "obs", e.target.value))} />
+      </label>
+      <label>
+        OBS password {st?.OBSPassword && <small className="hint">(one is kept)</small>}
+        <div className="row">
+          <input style={{ flex: 1 }} type="password" autoComplete="off" value={pw} placeholder="empty if OBS has none" onChange={(e) => setPw(e.target.value)} />
+          <button disabled={!pw} onClick={() => keep("obs", pw, () => setPw(""))}>Keep</button>
+          <button disabled={!st?.OBSPassword} onClick={() => keep("obs", "", () => setPw(""))}>Remove</button>
+        </div>
+      </label>
+      <p className="hint">Addresses are saved with the deck. Tokens and passwords go to the system keychain as soon as you press Keep, and are not in config.json.</p>
+    </>
   );
 }

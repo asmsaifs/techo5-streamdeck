@@ -150,3 +150,14 @@ describe("global hotkeys", () => {
     expect(m.deleteProfile(m.setHotkey(two, "kids", "home", "1,0", "Alt+8"), "kids").hotkeys!["Alt+8"]).toBeUndefined();
   });
 });
+
+describe("integrations", () => {
+  it("sets and clears an address, and drops the bare section", () => {
+    const a = m.setIntegration(base(), "obs", " localhost:4455 ");
+    expect(a.integrations).toEqual({ obs: "localhost:4455" });
+    const b = m.setIntegration(a, "homeassistant", "http://ha:8123");
+    expect(b.integrations).toEqual({ obs: "localhost:4455", homeassistant: "http://ha:8123" });
+    expect(m.setIntegration(m.setIntegration(b, "obs", ""), "homeassistant", " ").integrations).toBeUndefined();
+    expect(base().integrations).toBeUndefined();
+  });
+});

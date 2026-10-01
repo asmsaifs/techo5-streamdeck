@@ -36,6 +36,14 @@ export interface Config {
   devices?: Record<string, { profile: string }>;
   profiles: Record<string, Profile>;
   hotkeys?: Record<string, HotkeyTarget>;
+  integrations?: Integrations;
+}
+
+/** Where the Home Assistant and OBS actions connect. Their token and password are not here: they
+ * are in the system keychain. */
+export interface Integrations {
+  homeassistant?: string;
+  obs?: string;
 }
 
 /** The button a global hotkey presses. */
@@ -43,6 +51,17 @@ export interface HotkeyTarget {
   profile: string;
   page: string;
   button: string;
+}
+
+/** Sets one integration's address; an empty one is removed, and so is the section when it is bare. */
+export function setIntegration(cfg: Config, key: keyof Integrations, value: string): Config {
+  const next = clone(cfg);
+  const all = { ...(next.integrations ?? {}) };
+  if (value.trim()) all[key] = value.trim();
+  else delete all[key];
+  if (Object.keys(all).length) next.integrations = all;
+  else delete next.integrations;
+  return next;
 }
 
 export const HOME = "home";
@@ -153,6 +172,9 @@ export const PALETTE_LABELS: Record<string, string> = {
   "volume.set": "Set volume",
   "volume.mute": "Mute sound",
   "mic.mute": "Mute microphone",
+  http: "Web request",
+  "ha.service": "Home Assistant",
+  obs: "OBS",
   lock: "Lock screen",
   sleep: "Sleep",
   screenshot: "Screenshot",

@@ -145,6 +145,11 @@ func TestValidate(t *testing.T) {
 				`server.key: the key must be at least 16 characters`,
 				`server.listen: "9555" is not host:port`,
 				"version: is 2; this version reads 1"}},
+		{"integrations", `{"version":1,"server":{"listen":"0.0.0.0:9555","key":"0123456789abcdef"},
+			"integrations":{"homeassistant":"ftp://ha","obs":"localhost"},
+			"profiles":{"default":{"pages":{"home":{}}}}}`,
+			[]string{`integrations.homeassistant: "ftp://ha" is not an http:// or https:// address`,
+				`integrations.obs: "localhost" is not host:port, like localhost:4455`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

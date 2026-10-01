@@ -46,3 +46,12 @@ export const settings = () => call<Settings>("Settings");
 export const devices = () => call<Device[]>("Devices");
 export const setListen = (addr: string) => call<void>("SetListen", addr);
 export const regenerateKey = () => call<string>("RegenerateKey");
+
+/** Which integration secrets are in the keychain. The values never come back. */
+export interface SecretStatus {
+  HomeAssistantToken: boolean;
+  OBSPassword: boolean;
+}
+export const secretStatus = () => call<SecretStatus>("Secrets");
+/** Stores the token ("homeassistant") or password ("obs"); an empty value removes it. */
+export const setSecret = (which: "homeassistant" | "obs", value: string) => call<void>("SetSecret", which, value);

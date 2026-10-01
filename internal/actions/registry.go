@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 )
 
 // Handler runs one action.
@@ -23,6 +24,10 @@ type Handler func(ctx context.Context, r *Registry, a *deck.Action) error
 type Registry struct {
 	Sys System
 	Log *slog.Logger
+	// Integrations gives where ha.service and obs connect, as the config has them now; Secrets
+	// holds their token and password. Both may be nil: those actions then say they are not set up.
+	Integrations func() *deck.Integrations
+	Secrets      secrets.Store
 
 	mu       sync.RWMutex
 	handlers map[string]Handler
@@ -46,6 +51,9 @@ func New(sys System, log *slog.Logger) *Registry {
 	r.Register("multi", multi)
 	r.Register("toggle", toggle)
 	registerControls(r)
+	r.Register("http", httpAction)
+	r.Register("ha.service", haServiceAction)
+	r.Register("obs", obsAction)
 	return r
 }
 
