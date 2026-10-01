@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"image"
@@ -34,6 +35,9 @@ type show struct {
 	conn    net.Conn
 	enc     *json.Encoder
 	stats   stats
+
+	// sound is the Show's audio, when the hello advertises audio1; nil otherwise.
+	sound *playout
 }
 
 // stats is what came in, for the window's title.
@@ -42,8 +46,12 @@ type stats struct {
 }
 
 func newShow(server, key string, h wire.Hello) *show {
-	return &show{server: server, key: key, hello: h, painted: make(chan struct{}, 1),
+	s := &show{server: server, key: key, hello: h, painted: make(chan struct{}, 1),
 		frame: image.NewRGBA(image.Rect(0, 0, h.W, h.H))}
+	if h.Has(wire.CapAudio) {
+		s.sound = newPlayout()
+	}
+	return s
 }
 
 // run connects and reconnects until ctx ends, waiting longer each time it fails, as the device does.
@@ -100,6 +108,9 @@ func (s *show) once(ctx context.Context) error {
 		s.conn, s.enc = nil, nil
 		s.mu.Unlock()
 	}()
+	if s.sound != nil {
+		s.sound.reset() // a new connection starts the device's audio over
+	}
 	slog.Info("connected", "server", s.server)
 
 	r := bufio.NewReaderSize(c, 256<<10)
@@ -129,12 +140,35 @@ func (s *show) once(ctx context.Context) error {
 			s.paintDoubled(m.At, img)
 		case wire.KindProblem:
 			s.setProblem(string(m.Data))
+		case wire.KindSetup, wire.KindClock, wire.KindAudio:
+			if s.sound == nil {
+				slog.Warn("sound sent to a Show that did not advertise it", "kind", m.Kind)
+				continue
+			}
+			s.soundMsg(m)
 		default:
 			// The device ignores kinds it does not know; a server that sends one did not check the
 			// hello's caps, which is worth seeing.
 			slog.Warn("a message kind this Show never advertised", "kind", m.Kind)
 		}
 	}
+}
+
+// soundMsg hands kinds 4 to 6 to the audio.
+func (s *show) soundMsg(m wire.Msg) {
+	if m.Kind == wire.KindSetup {
+		s.sound.setup(m.Data)
+		return
+	}
+	if len(m.Data) < 8 {
+		return
+	}
+	us := int64(binary.BigEndian.Uint64(m.Data))
+	if m.Kind == wire.KindClock {
+		s.sound.clock(us)
+		return
+	}
+	s.sound.audio(us, m.Data[8:])
 }
 
 // touch sends one touch line, given a moment at most, as the device does.

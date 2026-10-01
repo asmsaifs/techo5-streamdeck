@@ -112,7 +112,9 @@ setting, default 0) so that picture and sound meet. The device needs to know not
   and the clock every second, moves the timeline forward after a stall (more than 300 ms behind),
   never stamps further ahead than the latency, and drops the oldest queued chunk when the sink is
   slow. A source (5.4) calls `Stream.Write`.
-- `cmd/fakeshow` plays kinds 4/5 in step 5.5.
+- `cmd/fakeshow` advertises `audio1` by default and plays the sound through the sound card
+  (`-caps ""` for an old Show, `-mute` to only count). With `-shot -listen 4s` it prints chunks,
+  peak, late, dropped, underruns and silence, for checking a server without listening.
 
 ## Open
 

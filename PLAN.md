@@ -580,7 +580,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 5.2 Device audio (techo5, OTA) — committed in techo5, not released: the dashboard stream advertises `audio1` and plays kinds 4-6 through `cast.Playback`; releases the speaker 3 s after the audio stops; unit-tested, and heard on the real Show (v0.10.4-rc.1 by hand over ssh, 2026-10-01); not yet released over OTA
 - [x] 5.3 Desktop audio pipeline — wire kinds 4-6 with the cap guard, `internal/audio` (resampler, 20 ms chunker, stamps, clock, stall jump, drop-oldest); unit-tested, not connected to a source yet (5.4)
 - [x] 5.4 Website audio capture — `sound` (show/desktop/off) and `av_offset_ms` on `stream.web`; in-page tab capture on every OS (macOS tested with Chrome 154 and on the wire through the server); YouTube heard on the real Show (2026-10-01; CSP fallback to a ScriptProcessorNode); no Windows/Linux/DRM check
-- [ ] 5.5 fakeshow audio → **v0.4.0**
+- [x] 5.5 fakeshow audio → **v0.4.0** (not tagged yet, same wait as v0.1.0 for the OTA release of the device side) — ebiten's audio (oto) plays kinds 4-6 from a queue that places chunks as the device does (clock offset, latency, late drop); `-shot -listen` prints the numbers; no drift correction
 - [ ] 6.1 Helper protocol
 - [ ] 6.2 macOS helper
 - [ ] 6.3 Windows helper

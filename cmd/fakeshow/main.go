@@ -5,8 +5,11 @@
 // Esc is the Show's swipe in from the left edge: it leaves the stream. Enter, or a click, opens it
 // again.
 //
+// It advertises audio1 and plays the sound the server sends (sound.go), through the computer's
+// sound card; -caps "" is a Show from before sound, -mute plays nothing.
+//
 // With -shot it opens no window: it connects, waits for a picture, sends the -tap touches, and writes
-// what is on the screen to a PNG. That is for scripts and for checking a server by hand.
+// what is on the screen to a PNG (with -listen, after listening for sound and printing its numbers). That is for scripts and for checking a server by hand.
 package main
 
 import (
@@ -24,6 +27,7 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
@@ -36,7 +40,9 @@ func main() {
 	key := flag.String("key", "", "the deck's key (default: the one in decksrv's config.json)")
 	name := flag.String("name", "Fake Show", "the device name sent in the hello")
 	size := flag.String("size", "960x480", "the screen, WxH: 960x480 is a Show 5, 1280x800 a Show 8")
-	caps := flag.String("caps", "", "comma-separated capabilities to advertise (none today)")
+	caps := flag.String("caps", wire.CapAudio, "comma-separated capabilities to advertise; empty is a Show from before sound")
+	mute := flag.Bool("mute", false, "do not play the sound (it is still received and counted)")
+	listen := flag.Duration("listen", 0, "with -shot: keep listening this long after the last picture, then print the audio's numbers")
 	shot := flag.String("shot", "", "no window: write the screen to this PNG and exit")
 	taps := flag.String("tap", "", "with -shot: taps to send first, as x,y;x,y")
 	wait := flag.Duration("wait", 5*time.Second, "with -shot: how long to wait for each picture")
@@ -57,13 +63,24 @@ func main() {
 	s := newShow(*server, *key, hello)
 
 	if *shot != "" {
-		if err := headless(s, *shot, *taps, *wait); err != nil {
+		if err := headless(s, *shot, *taps, *wait, *listen); err != nil {
 			fmt.Fprintln(os.Stderr, "fakeshow:", err)
 			os.Exit(1)
 		}
 		return
 	}
 
+	if s.sound != nil && !*mute {
+		// The sound card pulls from the same queue the audio messages fill. A short buffer keeps the
+		// card's own delay out of the way of what is being tried.
+		p, err := audio.NewContext(soundRate).NewPlayer(s.sound)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fakeshow: no sound card:", err)
+			os.Exit(1)
+		}
+		p.SetBufferSize(100 * time.Millisecond)
+		p.Play()
+	}
 	g := &game{s: s, g: gestures{w: w, h: h}, frame: image.NewRGBA(image.Rect(0, 0, w, h))}
 	g.open()
 	ebiten.SetWindowSize(w, h)
@@ -101,7 +118,7 @@ func savedKey() (string, error) {
 
 // headless connects, waits for a picture, sends the taps (waiting for a picture after each), and
 // writes the screen to path.
-func headless(s *show, path, taps string, wait time.Duration) error {
+func headless(s *show, path, taps string, wait, listen time.Duration) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.run(ctx)
@@ -136,6 +153,10 @@ func headless(s *show, path, taps string, wait time.Duration) error {
 		if err := next(fmt.Sprintf("after the tap at %d,%d", x, y)); err != nil {
 			return err
 		}
+	}
+	if listen > 0 && s.sound != nil {
+		time.Sleep(listen)
+		fmt.Println(s.sound.stats())
 	}
 	img := image.NewRGBA(image.Rect(0, 0, s.hello.W, s.hello.H))
 	s.snapshot(img, ^uint64(0))
