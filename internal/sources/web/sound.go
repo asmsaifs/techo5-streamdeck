@@ -40,32 +40,55 @@ const captureScript = `(() => {
     "process(i){const c=i[0];if(!c||!c[0])return true;const l=c[0],r=c[1]||c[0];" +
     "for(let k=0;k<l.length;k++){const a=l[k],b=r[k];this.b[this.n++]=(a<-1?-1:a>1?1:a)*32767;this.b[this.n++]=(b<-1?-1:b>1?1:b)*32767;" +
     "if(this.n===1920){this.port.postMessage(this.b.buffer.slice(0));this.n=0}}return true}}registerProcessor('deck',P)";
-  let running = null, stop = () => {};
+  let running = null, stop = () => {}, cur = null;
+  function send(data) {
+    const u = new Uint8Array(data); let s = "";
+    for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
+    window[bind](btoa(s));
+  }
   async function begin() {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true, preferCurrentTab: true, selfBrowserSurface: "include",
       audio: {echoCancellation: false, autoGainControl: false, noiseSuppression: false,
               channelCount: 2, suppressLocalAudioPlayback: true},
     });
+    cur = stream;
     const tracks = stream.getAudioTracks();
     if (!tracks.length) { stream.getTracks().forEach(t => t.stop()); throw new Error("the tab has no audio track"); }
     // Only the sound is wanted. The video track would also compete with the screencast for the
     // page's frames, which then stop.
     stream.getVideoTracks().forEach(t => t.stop());
-    const ctx = new AudioContext({sampleRate: 48000});
-    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], {type: "text/javascript"})));
-    const node = new AudioWorkletNode(ctx, "deck");
-    node.port.onmessage = e => {
-      const u = new Uint8Array(e.data); let s = "";
-      for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode.apply(null, u.subarray(i, i + 8192));
-      window[bind](btoa(s));
-    };
-    ctx.createMediaStreamSource(new MediaStream(tracks)).connect(node);
+    let ctx;
+    try {
+      ctx = new AudioContext({sampleRate: 48000});
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([worklet], {type: "text/javascript"})));
+      const node = new AudioWorkletNode(ctx, "deck");
+      node.port.onmessage = e => send(e.data);
+      ctx.createMediaStreamSource(new MediaStream(tracks)).connect(node);
+    } catch (err) {
+      // A page whose content security policy refuses a blob: script (YouTube's does) cannot load a
+      // worklet. A ScriptProcessorNode loads nothing: it is deprecated, but it is run on the page's
+      // own thread, so a page that is busy may leave small gaps.
+      if (ctx) ctx.close();
+      ctx = new AudioContext({sampleRate: 48000});
+      const sp = ctx.createScriptProcessor(1024, 2, 2);
+      const buf = new Int16Array(1920); let n = 0;
+      sp.onaudioprocess = e => {
+        const l = e.inputBuffer.getChannelData(0), r = e.inputBuffer.numberOfChannels > 1 ? e.inputBuffer.getChannelData(1) : l;
+        for (let k = 0; k < l.length; k++) {
+          const a = l[k], b = r[k];
+          buf[n++] = (a < -1 ? -1 : a > 1 ? 1 : a) * 32767; buf[n++] = (b < -1 ? -1 : b > 1 ? 1 : b) * 32767;
+          if (n === 1920) { send(buf.buffer.slice(0)); n = 0; }
+        }
+      };
+      ctx.createMediaStreamSource(new MediaStream(tracks)).connect(sp);
+      sp.connect(ctx.destination); // it only runs while connected on; its output is silence
+    }
     stop = () => { stream.getTracks().forEach(t => t.stop()); ctx.close(); running = null; stop = () => {}; };
     tracks[0].onended = () => stop();
   }
   window.__deckAudio = {
-    start() { return running = running || begin().then(() => "ok", e => { running = null; throw e; }); },
+    start() { return running = running || begin().then(() => "ok", e => { running = null; if (cur) cur.getTracks().forEach(t => t.stop()); cur = null; throw e; }); },
     stop() { stop(); return "stopped"; },
   };
 })()`

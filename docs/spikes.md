@@ -100,6 +100,10 @@ Option A as the spike found it, with three things only a real tile showed:
   Show saw nothing change). `--disable-infobars` removes it.
 - **Stop the capture's video track** (`getVideoTracks().forEach(t => t.stop())`); the audio
   carries on and the page is not asked for frames it will not use.
+- **YouTube's content security policy refuses the `blob:` worklet module** (`Failed to load worklet
+  module script`), so capture failed and the page played on the Mac. The script now falls back to a
+  `ScriptProcessorNode`, which loads nothing; checked on a real YouTube video (peak near full
+  scale) and with a CSP test page.
 - PCM goes from the page to Go through a `Runtime.addBinding` (random name per tab), base64, one
   20 ms block per call; no WebSocket and no port.
 - A full navigation starts the capture again from `Page.domContentEventFired` (the script is

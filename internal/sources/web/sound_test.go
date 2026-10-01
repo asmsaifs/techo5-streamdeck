@@ -65,6 +65,34 @@ func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Fatalf("never saw %s", what)
 }
 
+// A page whose content security policy refuses a blob: script, as YouTube's does, cannot load an
+// audio worklet: its sound is still captured.
+func TestSoundSurvivesAStrictContentSecurityPolicy(t *testing.T) {
+	m := browserOrSkip(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "script-src 'self' 'unsafe-inline'")
+		fmt.Fprint(w, `<!doctype html><body style="background:#123"><script>
+const c = new AudioContext(); const o = c.createOscillator(); o.frequency.value = 440;
+o.connect(c.destination); o.start(); c.resume();</script>`)
+	}))
+	defer srv.Close()
+	s, err := m.New(Spec{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got pcmSink
+	s.SetSound(got.write)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx, image.Pt(960, 480)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "a second of sound", func() bool { b, _, _ := got.get(); return b >= 48000*4 })
+	if _, peak, odd := got.get(); peak < 4000 || odd != 0 {
+		t.Errorf("peak %d, %d odd blocks", peak, odd)
+	}
+}
+
 func TestSourceSendsThePagesSound(t *testing.T) {
 	m := browserOrSkip(t)
 	srv := tonePage(t)
