@@ -6,6 +6,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
 	github.com/chromedp/chromedp v0.16.0
 	github.com/flynn/noise v1.1.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/hajimehoshi/ebiten/v2 v2.10.4
 	golang.org/x/image v0.46.0
 )

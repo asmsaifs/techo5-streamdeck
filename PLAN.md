@@ -558,7 +558,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [ ] 0.3 decksrv hello-world on the Show — code done and checked with fakeshow; real Show check open
 - [x] 0.4 fakeshow simulator
 - [ ] 0.5 Spikes (Wails/hotkeys, web audio, ScreenCaptureKit) — macOS done (docs/spikes.md); Windows, Linux and the hands-on tray/hotkey check open
-- [ ] 1.1 Model + store
+- [x] 1.1 Model + store
 - [ ] 1.2 Renderer
 - [ ] 1.3 Screen pipeline
 - [ ] 1.4 Server + DeckSource
