@@ -1,0 +1,23 @@
+# Build output
+/bin/
+/build/bin/
+*.exe
+*.test
+*.out
+
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
+
+# Swift / Rust helpers
+/helpers/mac/.build/
+/helpers/win/target/
+
+# Local config and secrets
+*.key
+.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
