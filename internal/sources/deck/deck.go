@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	model "github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
@@ -24,14 +25,21 @@ type Runner interface {
 	Run(ctx context.Context, a *model.Action) error
 }
 
+// Toggler is what a Runner that keeps toggle state also provides: whether the toggle on the button
+// with that key (actions.ButtonKey) is on, so the deck can ring it.
+type Toggler interface {
+	On(key string) bool
+}
+
 // How long a button shows each look after a tap. The Show sends a tap only when the finger lifts,
 // so "pressed" is not held down by the finger: it is a short flash that says the tap was seen.
 const (
 	pressFor = 80 * time.Millisecond
 	flashFor = 150 * time.Millisecond
 
-	// actionTimeout bounds one action, so a hung script does not hold its button for ever.
-	actionTimeout = 30 * time.Second
+	// actionTimeout bounds one action at most, so nothing holds its button for ever; the run action
+	// has a shorter timeout of its own.
+	actionTimeout = 10 * time.Minute
 )
 
 // Source is the deck for one connected device.
@@ -163,7 +171,7 @@ func (s *Source) Refresh() {
 	if p == nil {
 		return // removed by an edit; the last picture stays up
 	}
-	pg, _, _ := s.page(p)
+	pg, name, _ := s.page(p)
 	if pg == nil {
 		return
 	}
@@ -173,6 +181,19 @@ func (s *Source) Refresh() {
 		st[c] = v
 	}
 	s.mu.Unlock()
+	// A toggle that is on is ringed, whatever else its button is showing.
+	if t, ok := s.run.(Toggler); ok {
+		for key, b := range pg.Buttons {
+			if b == nil || b.Action == nil || b.Action.Type != "toggle" {
+				continue
+			}
+			if c, err := model.ParseCell(key); err == nil && t.On(actions.ButtonKey(s.profile, name, c)) {
+				v := st[c]
+				v.On = true
+				st[c] = v
+			}
+		}
+	}
 	img := s.r.Grid(p, pg, s.size, st)
 	// Latest wins: replace a frame the encoder has not taken yet.
 	select {
@@ -192,7 +213,7 @@ func (s *Source) Touch(t wire.Touch) {
 	if p == nil {
 		return
 	}
-	pg, _, _ := s.page(p)
+	pg, name, _ := s.page(p)
 	if pg == nil {
 		return
 	}
@@ -204,10 +225,10 @@ func (s *Source) Touch(t wire.Touch) {
 	if b == nil || b.Action == nil {
 		return
 	}
-	s.press(cell, b.Action, p)
+	s.press(cell, b.Action, p, actions.ButtonKey(s.profile, name, cell))
 }
 
-func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile) {
+func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile, key string) {
 	switch a.Type {
 	case "page":
 		var v struct {
@@ -233,17 +254,17 @@ func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile) {
 		s.Refresh()
 		return
 	}
-	go s.runAction(cell, a)
+	go s.runAction(cell, a, key)
 }
 
 // runAction shows the button pressed, runs the action and flashes its result. The action starts
 // at once; the look only waits for it so the press is never shorter than it takes to see.
-func (s *Source) runAction(cell model.Cell, a *model.Action) {
+func (s *Source) runAction(cell model.Cell, a *model.Action, key string) {
 	n := s.set(cell, render.CellState{Pressed: true})
 	s.Refresh()
 
 	done := make(chan error, 1)
-	go func() { done <- s.exec(a) }()
+	go func() { done <- s.exec(a, key) }()
 	pressed := time.NewTimer(pressFor)
 	defer pressed.Stop()
 	var err error
@@ -266,11 +287,11 @@ func (s *Source) runAction(cell model.Cell, a *model.Action) {
 	}
 }
 
-func (s *Source) exec(a *model.Action) error {
+func (s *Source) exec(a *model.Action, key string) error {
 	if s.run == nil {
 		return fmt.Errorf("no action runner: cannot run %q", a.Type)
 	}
-	ctx, cancel := context.WithTimeout(s.ctx, actionTimeout)
+	ctx, cancel := context.WithTimeout(actions.WithButton(s.ctx, key), actionTimeout)
 	defer cancel()
 	return s.run.Run(ctx, a)
 }

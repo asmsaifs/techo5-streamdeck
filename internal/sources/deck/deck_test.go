@@ -306,3 +306,37 @@ func btoi(b bool) int {
 	}
 	return 0
 }
+
+// toggleRunner is a Runner that keeps toggle state the way actions.Registry does.
+type toggleRunner struct {
+	fakeRunner
+	on map[string]bool
+}
+
+func (r *toggleRunner) On(key string) bool { return r.on[key] }
+
+// A toggle that is on is drawn ringed, and stays so after its press flash has cleared.
+func TestToggleIsRinged(t *testing.T) {
+	c := testConfig(t, `{"default":{"pages":{"home":{"buttons":{
+		"0,0":{"label":"Mute","action":{"type":"toggle","on":{"type":"run"},"off":{"type":"run"}}}}}}}}`)
+	p := c.Profiles["default"]
+	r := &toggleRunner{on: map[string]bool{}}
+	s, rd := start(t, c, r)
+	next(t, s)
+	r.on["default/home/0,0"] = true
+	s.Refresh()
+	want := rd.Grid(p, p.Pages["home"], size, render.State{{}: {On: true}})
+	if !same(next(t, s), want) {
+		t.Error("an on toggle is not ringed")
+	}
+	// While flashing, the ring is kept.
+	tapAt(s, model.Cell{}, p)
+	pressed := rd.Grid(p, p.Pages["home"], size, render.State{{}: {Pressed: true, On: true}})
+	if !same(next(t, s), pressed) {
+		t.Error("the pressed look of an on toggle lost its ring")
+	}
+	next(t, s) // flash
+	if !same(next(t, s), want) {
+		t.Error("the ring did not stay after the flash")
+	}
+}

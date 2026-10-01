@@ -1,8 +1,8 @@
 // Command decksrv is the deck server without the desktop app, for debugging: it serves the deck
 // in config.json to every Show that connects, and reloads the file when it is edited.
 //
-// Actions that do something on the computer arrive with step 1.5; until then a button that is not
-// a folder or Back flashes red.
+// With -dry-run the actions are logged and not performed, to try a deck out without it opening
+// anything or pressing keys.
 package main
 
 import (
@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
@@ -24,14 +25,15 @@ import (
 func main() {
 	dir := flag.String("dir", "", "the config folder (default: techo5-streamdeck in the user config folder)")
 	listen := flag.String("listen", "", "address to listen on (default: the config's server.listen)")
+	dry := flag.Bool("dry-run", false, "log what actions would do instead of doing it")
 	flag.Parse()
-	if err := run(*dir, *listen); err != nil {
+	if err := run(*dir, *listen, *dry); err != nil {
 		fmt.Fprintln(os.Stderr, "decksrv:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir, listen string) error {
+func run(dir, listen string, dry bool) error {
 	if dir == "" {
 		d, err := store.Dir()
 		if err != nil {
@@ -59,7 +61,12 @@ func run(dir, listen string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	srv := &server.Server{Config: st.Config, Renderer: render.New(filepath.Join(dir, store.IconsDir))}
+	var sys actions.System = actions.OS()
+	if dry {
+		sys = actions.DryRun(slog.Default())
+		fmt.Println("dry run: actions are logged, not performed")
+	}
+	srv := &server.Server{Config: st.Config, Runner: actions.New(sys, nil), Renderer: render.New(filepath.Join(dir, store.IconsDir))}
 	err = st.Watch(ctx, func(c *deck.Config, err error) {
 		if err != nil {
 			slog.Warn("config.json is broken; keeping the last good one", "err", err)
