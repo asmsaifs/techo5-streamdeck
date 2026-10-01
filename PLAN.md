@@ -102,11 +102,13 @@ dashcast's `soft`/`settle` rule).
 
 ### Navigation on the Show
 
-- Deck: tap button = run action. Long-press (≥600 ms) = secondary action (optional per button).
+- Deck: tap button = run action. The Show sends a tap only when the finger lifts, with no
+  duration, so there is no long-press until a device change adds one (see docs/spikes.md).
   Folder buttons open sub-pages; a reserved "Back" cell appears on sub-pages.
-- Live view (web/app): **swipe down from the top edge** (start y < 24, drag > 80 px) returns to
-  the deck. A small "◀ Deck" chip is overlaid for 3 s when the view opens and again after any tap
-  in the top 24 px. Swipe in from the left edge is still the device's own "leave stream" gesture.
+- Live view (web/app): a small "◀ Deck" chip is overlaid for 3 s when the view opens and again
+  after any tap in the top 40 px; tapping it returns to the deck. (A swipe down from the top edge
+  cannot be used: the device keeps drags that start in the top 40 px or the side 40 px strips.)
+  Swipe in from the left edge is still the device's own "leave stream" gesture.
 
 ### Data model (stored as JSON)
 
@@ -166,13 +168,13 @@ in the desktop app on error.
 | Concern | Choice | Why |
 |---|---|---|
 | Language (core) | **Go 1.23+** | Same as techo5, dashcast, cast wire: copy `secure.go`, the diff/JPEG code, chromedp browser code. |
-| Desktop shell | **Wails v2** (or v3 if stable by the time you start; it adds tray + multi-window natively) | Go backend + web UI, small binaries, builds for all 3 OSes. |
+| Desktop shell | **Wails v3** (beta; chosen in spike 0.5.1: tray, autostart and global shortcuts built in) | Go backend + web UI, small binaries, builds for all 3 OSes. |
 | UI | React + TypeScript + Vite + Tailwind + **dnd-kit** (grid drag-drop) + shadcn/ui | Fast to vibe-code, good components. |
 | Icons | Lucide/Tabler SVG set bundled, rasterized in Go with `oksvg`/`rasterx`; emoji; user PNG/JPG | Crisp at any cell size. |
 | Drawing the deck | `github.com/fogleman/gg` (+ `golang.org/x/image/font/opentype` with Inter) | Simple 2D in pure Go. |
 | Noise | `github.com/flynn/noise` | What dashcast/echod already use. |
 | Browser | `github.com/chromedp/chromedp` + system Chrome/Edge/Chromium (or download Chrome for Testing) | dashcast-proven. |
-| Global hotkeys | `golang.design/x/hotkey` | mac/win/X11. Wayland: XDG GlobalShortcuts portal (later). |
+| Global hotkeys | Wails v3 `app.GlobalShortcut` | mac (Carbon, no permission)/win/X11/Wayland portal. `golang.design/x/hotkey` needed Accessibility permission on macOS (spike 0.5.1). |
 | Input injection | `github.com/go-vgo/robotgo` (keys/mouse/window) with per-OS fallbacks | One API for 3 OSes. |
 | Clipboard | `golang.design/x/clipboard` | `paste` action. |
 | mDNS | `github.com/grandcat/zeroconf` | Discovery (Phase 7). |
@@ -264,8 +266,9 @@ pure (diffing, wire, model, rendering).
 
 **0.4 `cmd/fakeshow` simulator (M)**
 - Ebitengine window 960×480 (flag `-size 1280x800`), connects like the device, sends hello,
-  draws `picture`/`half`/`problem` messages, mouse → tap/down/move/up lines (tap = down+up < 250 ms
-  and < 10 px movement, as the device decides), keyboard `Esc` = left-edge swipe (disconnect).
+  draws `picture`/`half`/`problem` messages, mouse → tap/down/move/up lines by the device's rules
+  (tap on release if it moved ≤ 12 px; otherwise down/move/up; edge drags not sent — see
+  docs/spikes.md), keyboard `Esc` = left-edge swipe (disconnect). `-shot` = headless check.
 - Later (Phase 5) plays audio with `oto`.
 - Done when: fakeshow shows the hello-world picture and taps print on decksrv.
 - Prompt: *"Write cmd/fakeshow: an Ebitengine app that behaves like the TECHO5 dashboard stream client (see techo5/echod/internal/feature/dashboard/stream.go): handshake, hello JSON line, draw kindPicture/kindHalf (doubled)/kindProblem, send touch JSON lines from the mouse."*
@@ -310,10 +313,10 @@ Write findings into `docs/spikes.md`:
 **1.4 Server + DeckSource (M)**
 - `server`: accept, handshake, read hello, map device name → profile, create session with nav
   state (page stack), run source → encoder → socket, read touches → source.
-- DeckSource: hit-test cell from touch; `down` → pressed state (repaint cell), `up` inside →
-  run action, long-press timer → secondary action.
-- Keepalive: if nothing changed for 5 s, send nothing (device does not time out dashcast; verify
-  in 0.3, else resend one small rect).
+- DeckSource: hit-test cell from touch; `tap` → pressed state flashed on the cell and run the
+  action (the device sends no `down` before a tap, see docs/spikes.md); `down`/`move`/`up` are
+  drags and are ignored on the deck.
+- Keepalive: none: the device never sets a read deadline after the hello (confirm on the Show in 0.3).
 - Done when: fakeshow and the real Show show the grid; pressing animates; folders navigate.
 
 **1.5 First actions (M)**
@@ -552,9 +555,9 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 
 - [x] 0.1 Repo + CLAUDE.md
 - [x] 0.2 Port the wire
-- [ ] 0.3 decksrv hello-world on the Show
+- [ ] 0.3 decksrv hello-world on the Show — code done and checked with fakeshow; real Show check open
 - [x] 0.4 fakeshow simulator
-- [ ] 0.5 Spikes (Wails/hotkeys, web audio, ScreenCaptureKit)
+- [ ] 0.5 Spikes (Wails/hotkeys, web audio, ScreenCaptureKit) — macOS done (docs/spikes.md); Windows, Linux and the hands-on tray/hotkey check open
 - [ ] 1.1 Model + store
 - [ ] 1.2 Renderer
 - [ ] 1.3 Screen pipeline
