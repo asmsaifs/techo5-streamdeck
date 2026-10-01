@@ -571,7 +571,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 3.2 Media/volume/mic/system — commands per OS tested with a fake runner; macOS volume checked for real. Hands-on checklist in docs/actions.md; Windows has no mic mute and a stepped volume.set (Core Audio open); Linux untested
 - [x] 3.3 HTTP / Home Assistant / OBS — http, ha.service, obs; addresses in config, secrets in the OS keychain; tested against fake servers and a real local webhook/keychain, not yet against a real Home Assistant or OBS
 - [x] 3.4 Live tiles — clock, cpu, ram, ha_state (polled, not subscribed), script, and a state tile that makes toggles follow the real state; shared cache, only the shown page is read
-- [ ] 3.5 Profile auto-switch
+- [x] 3.5 Profile auto-switch — rules in config, front app by lsappinfo / GetForegroundWindow / xprop; macOS checked for real, Windows and Linux compile only. Phase 3 done
 - [ ] 4.1 WebSource (dashcast port)
 - [ ] 4.2 Live view chip + back gesture
 - [ ] 4.3 Video mode

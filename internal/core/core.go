@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/foreground"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
@@ -31,6 +33,10 @@ type Options struct {
 	Listen string
 	// DryRun logs actions instead of performing them.
 	DryRun bool
+	// Foreground tells the application in front, for auto-switch; empty means the real one
+	// (internal/foreground). ForegroundEvery is how often it is asked, 1 s if zero.
+	Foreground      func(context.Context) (foreground.App, error)
+	ForegroundEvery time.Duration
 }
 
 // Core is the running deck server plus its config.
@@ -102,6 +108,15 @@ func New(o Options) (*Core, error) {
 		c.stop()
 		return nil, err
 	}
+	fg := o.Foreground
+	if fg == nil {
+		fg = foreground.Current
+	}
+	every := o.ForegroundEvery
+	if every <= 0 {
+		every = time.Second
+	}
+	go c.watchForeground(fg, every)
 	// The socket is a convenience: an app that cannot open it (a second instance, a folder path
 	// too long for a socket) still serves the deck.
 	if err := control.Listen(c.root, dir, c.Trigger); err != nil {
@@ -284,4 +299,70 @@ func LANIP() string {
 	}
 	defer c.Close()
 	return c.LocalAddr().(*net.UDPAddr).IP.String()
+}
+
+// watchForeground follows the application in front while the config has auto-switch rules, and
+// tells the server when it changes. With no rules it asks nothing. An application that can not
+// be told (this one, or an error) leaves the deck as it is: clicking into the editor to change a
+// rule must not flip the deck back.
+func (c *Core) watchForeground(fg func(context.Context) (foreground.App, error), every time.Duration) {
+	self := selfNames()
+	var last string
+	var active, warned bool
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.root.Done():
+			return
+		case <-t.C:
+		}
+		if len(c.Store.Config().AutoSwitch) == 0 {
+			if active {
+				c.Server.SetForeground() // the rules are gone: every Show goes back to its own profile
+				active, last = false, ""
+			}
+			continue
+		}
+		active = true
+		ctx, cancel := context.WithTimeout(c.root, 3*time.Second)
+		app, err := fg(ctx)
+		cancel()
+		if err != nil {
+			if !warned {
+				warned = true
+				slog.Warn("auto-switch cannot tell which application is in front", "err", err)
+			}
+			continue
+		}
+		names := app.Names()
+		if anyMatch(names, self) {
+			continue
+		}
+		if sig := strings.Join(names, "\x00"); sig != last {
+			last = sig
+			c.Server.SetForeground(names...)
+		}
+	}
+}
+
+// IsSelf reports whether app is this one.
+func IsSelf(app foreground.App) bool { return anyMatch(app.Names(), selfNames()) }
+
+func anyMatch(names, against []string) bool {
+	for _, n := range names {
+		if foreground.Match(n, against...) {
+			return true
+		}
+	}
+	return false
+}
+
+// selfNames are what this app is called when it is in front.
+func selfNames() []string {
+	n := []string{"TECHO5 Stream Deck", "techo5-streamdeck"}
+	if exe, err := os.Executable(); err == nil {
+		n = append(n, filepath.Base(exe))
+	}
+	return n
 }

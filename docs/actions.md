@@ -103,3 +103,25 @@ subscribed to. With `-dry-run`, script and state tiles do not run their command.
 
 Checked for real: clock, cpu, ram, script and state tiles over the wire to the fake Show. Home
 Assistant tiles only against a fake server.
+
+## Profile by application (auto-switch)
+
+`autoSwitch` in `config.json` (editor: Shows > Profile by application) gives a Show another profile
+while an application is in front on this computer:
+
+```json
+"autoSwitch": [{"app": "Zoom", "profile": "meeting"}, {"app": "code.exe", "profile": "dev", "device": "Desk Show"}]
+```
+
+`app` is the application's name or id in any letter case ("Safari", "com.apple.Safari", "chrome",
+"chrome.exe"); `device` limits a rule to one Show. The first matching rule wins; with none a Show
+uses its own profile. The Show goes to the new profile's home page. With no rules nothing is polled.
+This app being in front (to edit a rule) never switches anything. The editor's Detect button waits
+4 seconds for you to switch to the application, then fills it in.
+
+| OS | How the front application is found | Notes |
+|---|---|---|
+| macOS | `lsappinfo` (Launch Services) | No permission needed. Checked for real. |
+| Windows | `GetForegroundWindow`, then the process's exe name | Compiles and vets; **untested on Windows**. |
+| Linux X11 | `xprop` (`_NET_ACTIVE_WINDOW`, `WM_CLASS`) | Needs xprop. **Untested.** |
+| Linux Wayland | not possible: a window cannot see another | Only XWayland windows answer; the rest says it cannot tell, once, in the log. |

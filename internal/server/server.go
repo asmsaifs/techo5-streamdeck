@@ -33,6 +33,7 @@ type Server struct {
 
 	mu       sync.Mutex
 	sessions map[*session]struct{}
+	front    []string // the names of the application in front on this computer, for auto-switch
 }
 
 // session is one connected Show.
@@ -101,8 +102,10 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-// Reload redraws every connected deck: call it when the config was reloaded.
+// Reload redraws every connected deck: call it when the config was reloaded. The auto-switch
+// rules may have changed too, so each Show's profile is worked out again.
 func (s *Server) Reload() {
+	s.applyProfiles()
 	s.mu.Lock()
 	var all []*deckview.Source
 	for se := range s.sessions {
@@ -114,6 +117,55 @@ func (s *Server) Reload() {
 	}
 }
 
+// SetForeground tells the server which application is in front on this computer (its names, as
+// foreground.App.Names gives them; none when unknown or when auto-switch is off). Each Show whose
+// profile an auto-switch rule changes is switched.
+func (s *Server) SetForeground(names ...string) {
+	s.mu.Lock()
+	s.front = names
+	s.mu.Unlock()
+	s.applyProfiles()
+}
+
+// Front is the application in front as last told by SetForeground.
+func (s *Server) Front() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.front...)
+}
+
+// effective is the profile the Show called device should show now.
+func (s *Server) effective(cfg *deck.Config, device string) string {
+	s.mu.Lock()
+	front := s.front
+	s.mu.Unlock()
+	return cfg.EffectiveProfile(device, front...)
+}
+
+func (s *Server) applyProfiles() {
+	cfg := s.Config()
+	if cfg == nil {
+		return
+	}
+	type change struct {
+		d    *deckview.Source
+		name string
+	}
+	var todo []change
+	s.mu.Lock()
+	for se := range s.sessions {
+		want := cfg.EffectiveProfile(se.hello.Name, s.front...)
+		if cfg.Profiles[want] != nil && want != se.deck.Profile() {
+			todo = append(todo, change{se.deck, want})
+		}
+	}
+	s.mu.Unlock()
+	for _, c := range todo {
+		s.log().Info("profile switched", "from", c.d.Profile(), "to", c.name)
+		c.d.SetProfile(c.name)
+	}
+}
+
 // Sessions lists the connected Shows.
 func (s *Server) Sessions() []Info {
 	s.mu.Lock()
@@ -121,7 +173,7 @@ func (s *Server) Sessions() []Info {
 	var out []Info
 	for se := range s.sessions {
 		out = append(out, Info{Name: se.hello.Name, Addr: se.from.String(), W: se.hello.W, H: se.hello.H,
-			Profile: s.Config().ProfileFor(se.hello.Name), Source: "deck", Since: se.since,
+			Profile: se.deck.Profile(), Source: "deck", Since: se.since,
 			Bytes: se.bytes.Load(), Frames: se.frames.Load()})
 	}
 	return out
@@ -155,7 +207,7 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 
 	out := wire.NewSender(c)
 	cfg = s.Config() // the config may have been reloaded while the handshake ran
-	name := cfg.ProfileFor(h.Name)
+	name := s.effective(cfg, h.Name)
 	if cfg.Profiles[name] == nil {
 		s.log().Warn("a Show's profile does not exist", "name", h.Name, "profile", name)
 		_ = out.Problem("The deck has no profile \"" + name + "\" for this Show. Check the desktop app's settings.")

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/asmsaifs/techo5-streamdeck/internal/foreground"
 )
 
 // Version is the config.json format this build writes. Older files are migrated on load (store).
@@ -26,6 +28,16 @@ type Config struct {
 	// Integrations is where the ha.service and obs actions connect. The tokens and passwords are
 	// not here: they are in the OS keychain (internal/secrets).
 	Integrations *Integrations `json:"integrations,omitempty"`
+	// AutoSwitch gives a Show another profile while an application is in front on this computer.
+	// The first rule that matches wins.
+	AutoSwitch []AutoRule `json:"autoSwitch,omitempty"`
+}
+
+// AutoRule switches to Profile while the application App is in front.
+type AutoRule struct {
+	App     string `json:"app"`              // its name or id, in any letter case: "Safari", "com.apple.Safari", "code.exe"
+	Profile string `json:"profile"`          // the profile to show
+	Device  string `json:"device,omitempty"` // only this Show; empty means every Show
 }
 
 // Integrations are the addresses of the services the actions talk to.
@@ -174,4 +186,22 @@ func (c *Config) ProfileFor(name string) string {
 		return d.Profile
 	}
 	return DefaultProfile
+}
+
+// EffectiveProfile is the profile the Show called device shows when the application with the given
+// names (foreground.App.Names) is in front: the profile of the first rule that matches, or the
+// Show's own. No names, or no match, is the Show's own.
+func (c *Config) EffectiveProfile(device string, names ...string) string {
+	for _, r := range c.AutoSwitch {
+		if r.Device != "" && r.Device != device {
+			continue
+		}
+		if _, ok := c.Profiles[r.Profile]; !ok {
+			continue
+		}
+		if foreground.Match(r.App, names...) {
+			return r.Profile
+		}
+	}
+	return c.ProfileFor(device)
 }

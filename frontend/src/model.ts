@@ -74,6 +74,14 @@ export interface Config {
   profiles: Record<string, Profile>;
   hotkeys?: Record<string, HotkeyTarget>;
   integrations?: Integrations;
+  autoSwitch?: AutoRule[];
+}
+
+/** Shows `profile` while the application `app` is in front on this computer. */
+export interface AutoRule {
+  app: string;
+  profile: string;
+  device?: string;
 }
 
 /** Where the Home Assistant and OBS actions connect. Their token and password are not here: they
@@ -395,6 +403,11 @@ export function profileUsers(cfg: Config, profile: string): string[] {
 export function deleteProfile(cfg: Config, profile: string): Config {
   const next = clone(cfg);
   delete next.profiles[profile];
+  if (next.autoSwitch) {
+    const kept = next.autoSwitch.filter((r) => r.profile !== profile);
+    if (kept.length) next.autoSwitch = kept;
+    else delete next.autoSwitch;
+  }
   return retarget(next, (t) => (t.profile === profile ? null : t));
 }
 
@@ -411,4 +424,19 @@ export function rate(prev: { t: number; bytes: number; frames: number } | undefi
   if (!prev || now.t <= prev.t || now.bytes < prev.bytes) return { kbps: 0, fps: 0 };
   const s = (now.t - prev.t) / 1000;
   return { kbps: ((now.bytes - prev.bytes) * 8) / 1000 / s, fps: (now.frames - prev.frames) / s };
+}
+
+/** Replaces the auto-switch rules; none at all removes the section. */
+export function setAutoSwitch(cfg: Config, rules: AutoRule[]): Config {
+  const next = clone(cfg);
+  if (rules.length) next.autoSwitch = rules.map((r) => (r.device ? r : { app: r.app, profile: r.profile }));
+  else delete next.autoSwitch;
+  return next;
+}
+
+/** What is wrong with a rule before it is saved, or null. */
+export function ruleProblem(cfg: Config, r: AutoRule): string | null {
+  if (!r.app.trim()) return "Name the application.";
+  if (!(r.profile in cfg.profiles)) return `There is no profile "${r.profile}".`;
+  return null;
 }

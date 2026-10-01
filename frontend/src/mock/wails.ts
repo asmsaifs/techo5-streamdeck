@@ -33,6 +33,7 @@ const handlers: Record<string, (...a: any[]) => unknown> = {
   Save: (j: string) => void (cfg = JSON.parse(j)),
   Schemas: () => schemas,
   HotkeyProblems: () => ({}),
+  FrontApp: () => ({ Name: "Safari", ID: "com.apple.Safari" }),
   Secrets: () => ({ HomeAssistantToken: false, OBSPassword: false }),
   SetSecret: () => undefined,
   TestAction: () => undefined,

@@ -177,3 +177,20 @@ describe("live tiles", () => {
     expect(m.tileProblem({ type: "cpu", every: 0.5 })).toMatch(/1 to 3600/);
   });
 });
+
+describe("auto-switch rules", () => {
+  it("sets rules, drops the bare section, and drops rules of a deleted profile", () => {
+    const c = m.addProfile(base(), "game", "default");
+    const a = m.setAutoSwitch(c, [{ app: "Steam", profile: "game", device: "" }, { app: "Zoom", profile: "default" }]);
+    expect(a.autoSwitch).toEqual([{ app: "Steam", profile: "game" }, { app: "Zoom", profile: "default" }]);
+    expect(m.deleteProfile(a, "game").autoSwitch).toEqual([{ app: "Zoom", profile: "default" }]);
+    expect(m.setAutoSwitch(a, []).autoSwitch).toBeUndefined();
+    expect(m.deleteProfile(m.setAutoSwitch(c, [{ app: "Steam", profile: "game" }]), "game").autoSwitch).toBeUndefined();
+  });
+  it("says what a rule needs", () => {
+    const c = base();
+    expect(m.ruleProblem(c, { app: " ", profile: "default" })).toMatch(/application/);
+    expect(m.ruleProblem(c, { app: "x", profile: "nope" })).toMatch(/profile/);
+    expect(m.ruleProblem(c, { app: "x", profile: "default" })).toBeNull();
+  });
+});

@@ -55,3 +55,10 @@ export interface SecretStatus {
 export const secretStatus = () => call<SecretStatus>("Secrets");
 /** Stores the token ("homeassistant") or password ("obs"); an empty value removes it. */
 export const setSecret = (which: "homeassistant" | "obs", value: string) => call<void>("SetSecret", which, value);
+
+export interface FrontApp {
+  Name: string;
+  ID: string;
+}
+/** Waits, then names the application in front: pick the application during the wait. */
+export const frontApp = (waitSeconds: number) => call<FrontApp>("FrontApp", waitSeconds);

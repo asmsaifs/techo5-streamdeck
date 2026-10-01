@@ -77,6 +77,16 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for i, r := range c.AutoSwitch {
+		path := "autoSwitch." + strconv.Itoa(i)
+		if strings.TrimSpace(r.App) == "" {
+			add(path+".app", "is missing")
+		}
+		if _, ok := c.Profiles[r.Profile]; !ok {
+			add(path+".profile", "there is no profile %q", r.Profile)
+		}
+	}
+
 	if len(c.Profiles) == 0 {
 		add("profiles", "there are none: a deck needs at least the %q profile", DefaultProfile)
 	} else if _, ok := c.Profiles[DefaultProfile]; !ok {

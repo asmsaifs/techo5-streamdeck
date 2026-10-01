@@ -14,6 +14,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/foreground"
 	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
@@ -130,4 +131,23 @@ func (e *Editor) SetSecret(which, value string) error {
 		return fmt.Errorf("the system keychain refused it: %w", err)
 	}
 	return nil
+}
+
+// FrontApp waits the given seconds, so the user can switch to an application, and says which one
+// is in front then: it is how the editor fills in an auto-switch rule's application.
+func (e *Editor) FrontApp(waitSeconds int) (foreground.App, error) {
+	if waitSeconds < 0 || waitSeconds > 30 {
+		return foreground.App{}, errors.New("wait between 0 and 30 seconds")
+	}
+	time.Sleep(time.Duration(waitSeconds) * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	app, err := foreground.Current(ctx)
+	if err != nil {
+		return app, err
+	}
+	if core.IsSelf(app) {
+		return foreground.App{}, errors.New("this window was still in front: switch to the application within the wait")
+	}
+	return app, nil
 }

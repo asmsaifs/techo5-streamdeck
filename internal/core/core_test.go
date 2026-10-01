@@ -4,10 +4,14 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/foreground"
+	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
 
 func TestPauseAndResume(t *testing.T) {
@@ -147,4 +151,68 @@ func TestOnReloadFiresNowAndOnReload(t *testing.T) {
 	if n != 2 {
 		t.Errorf("fn ran %d times after a Reload, want 2", n)
 	}
+}
+
+func TestWatchForegroundSwitchesOnlyForRealApps(t *testing.T) {
+	var mu sync.Mutex
+	front := foreground.App{Name: "Steam", ID: "com.valvesoftware.steam"}
+	var asks int
+	c, err := New(Options{Dir: t.TempDir(), Listen: "127.0.0.1:0", DryRun: true, ForegroundEvery: 20 * time.Millisecond,
+		Foreground: func(context.Context) (foreground.App, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			asks++
+			return front, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	set := func(a foreground.App) { mu.Lock(); front = a; mu.Unlock() }
+	got := func() []string { c.Server.Config(); return c.Server.Front() }
+	waitFor := func(want string) {
+		t.Helper()
+		deadline := time.After(2 * time.Second)
+		for strings.Join(got(), ",") != want {
+			select {
+			case <-deadline:
+				t.Fatalf("front = %v, want %q", got(), want)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+
+	// No rules: nothing is asked.
+	time.Sleep(100 * time.Millisecond)
+	mu.Lock()
+	if asks != 0 {
+		t.Errorf("asked %d times with no rules", asks)
+	}
+	mu.Unlock()
+
+	// A save replaces the config; the watcher reads whichever is current.
+	setRules := func(r []deck.AutoRule) {
+		b, _ := store.Encode(c.Store.Config())
+		next, err := store.Parse(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next.AutoSwitch = r
+		if err := c.Store.Save(next); err != nil {
+			t.Fatal(err)
+		}
+		c.Reload()
+	}
+	setRules([]deck.AutoRule{{App: "steam", Profile: "default"}})
+	waitFor("Steam,com.valvesoftware.steam")
+
+	set(foreground.App{Name: "techo5-streamdeck", ID: "techo5-streamdeck"}) // this app: the deck stays
+	time.Sleep(100 * time.Millisecond)
+	waitFor("Steam,com.valvesoftware.steam")
+
+	set(foreground.App{Name: "Notes", ID: "com.apple.Notes"})
+	waitFor("Notes,com.apple.Notes")
+
+	setRules(nil) // the rules are removed: every Show goes back to its own profile
+	waitFor("")
 }

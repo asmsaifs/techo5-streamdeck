@@ -295,3 +295,48 @@ func TestReloadRedraws(t *testing.T) {
 		t.Errorf("the new theme was not drawn: %.2f", d)
 	}
 }
+
+// An application in front can switch a Show's profile, and leaving it switches back.
+func TestAutoSwitch(t *testing.T) {
+	c, err := deck.Decode([]byte(`{"version":1,"server":{"key":"` + key + `"},"profiles":{
+		"default":{"pages":{"home":{"buttons":{"0,0":{"label":"A","icon":"lucide:play"}}}}},
+		"game":{"theme":{"bg":"#aa2222"},"pages":{"home":{"buttons":{"0,0":{"label":"G","icon":"lucide:sun"}}}}}},
+		"autoSwitch":[{"app":"Zoom","profile":"game","device":"Other"},{"app":"steam","profile":"game"},{"app":"Gone","profile":"nope"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Fill()
+	if err := c.Validate(); err == nil {
+		t.Fatal("a rule for a profile that does not exist was valid")
+	}
+	delete(c.Profiles, "nothing")
+	c.AutoSwitch = c.AutoSwitch[:2]
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	srv, addr := startServer(t, c, &runner{})
+	sh := connect(t, addr, key, "Kitchen")
+	home := image.NewRGBA(sh.settle().Rect)
+	copy(home.Pix, sh.screen.Pix)
+	profile := func() string { return srv.Sessions()[0].Profile }
+
+	srv.SetForeground("Zoom", "us.zoom.xos") // a rule for another Show
+	if profile() != "default" {
+		t.Errorf("a rule for another device switched this one: %s", profile())
+	}
+	srv.SetForeground("Steam", "com.valvesoftware.steam")
+	if d := differs(sh.settle(), home); d < 10 || profile() != "game" {
+		t.Errorf("not switched: profile %s, picture differs %.2f", profile(), d)
+	}
+	late := connect(t, addr, key, "Late") // a Show that connects meanwhile starts there
+	late.settle()
+	for _, i := range srv.Sessions() {
+		if i.Profile != "game" {
+			t.Errorf("%s shows %s while Steam is in front", i.Name, i.Profile)
+		}
+	}
+	srv.SetForeground("Notes")
+	if d := differs(sh.settle(), home); d > 1 || profile() != "default" {
+		t.Errorf("not switched back: profile %s, differs %.2f", profile(), d)
+	}
+}

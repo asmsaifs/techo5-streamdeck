@@ -58,7 +58,7 @@ const (
 // Source is the deck for one connected device.
 type Source struct {
 	cfg     func() *model.Config // the current config, which changes under hot reload
-	profile string
+	profile string               // guarded by mu: SetProfile changes it
 	r       *render.Renderer
 	run     Runner
 	log     *slog.Logger
@@ -102,7 +102,7 @@ func (s *Source) Start(ctx context.Context, size image.Point) error {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	if s.profileNow() == nil {
 		s.cancel()
-		return fmt.Errorf("deck: there is no profile %q", s.profile)
+		return fmt.Errorf("deck: there is no profile %q", s.Profile())
 	}
 	go func() {
 		<-s.ctx.Done()
@@ -131,7 +131,30 @@ func (s *Source) profileNow() *model.Profile {
 	if c == nil {
 		return nil
 	}
-	return c.Profiles[s.profile]
+	return c.Profiles[s.Profile()]
+}
+
+// Profile is the profile being shown.
+func (s *Source) Profile() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.profile
+}
+
+// SetProfile shows another profile, from its home page, and redraws. The config does not have to
+// have it yet: a profile that is missing leaves the last picture up, as an edit that removes one does.
+func (s *Source) SetProfile(name string) {
+	s.mu.Lock()
+	if s.profile == name {
+		s.mu.Unlock()
+		return
+	}
+	s.profile = name
+	s.stack = nil
+	s.forget()
+	s.mu.Unlock()
+	s.Refresh()
+	s.kickTiles()
 }
 
 // page is the page being shown, and with it the cell of a Back button the deck added, if it did.
@@ -189,6 +212,7 @@ func (s *Source) Refresh() {
 	if s.ctx.Err() != nil {
 		return
 	}
+	prof := s.Profile()
 	p := s.profileNow()
 	if p == nil {
 		return // removed by an edit; the last picture stays up
@@ -209,7 +233,7 @@ func (s *Source) Refresh() {
 			if b == nil || b.Action == nil || b.Action.Type != "toggle" {
 				continue
 			}
-			if c, err := model.ParseCell(key); err == nil && t.On(actions.ButtonKey(s.profile, name, c)) {
+			if c, err := model.ParseCell(key); err == nil && t.On(actions.ButtonKey(prof, name, c)) {
 				v := st[c]
 				v.On = true
 				st[c] = v
@@ -270,7 +294,7 @@ func (s *Source) Touch(t wire.Touch) {
 	if b == nil || b.Action == nil {
 		return
 	}
-	s.press(cell, b.Action, p, actions.ButtonKey(s.profile, name, cell))
+	s.press(cell, b.Action, p, actions.ButtonKey(s.Profile(), name, cell))
 }
 
 func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile, key string) {
@@ -481,7 +505,7 @@ func (s *Source) readTile(tv *tileVal, tile *model.Tile, page string, cell model
 	}
 	if v.On != nil {
 		if o, ok := s.run.(OnSetter); ok {
-			o.SetOn(actions.ButtonKey(s.profile, page, cell), *v.On)
+			o.SetOn(actions.ButtonKey(s.Profile(), page, cell), *v.On)
 		}
 	}
 	if first || v.Text != old.Text || (v.Err == nil) != (old.Err == nil) || (v.On == nil) != (old.On == nil) || (v.On != nil && *v.On != *old.On) {

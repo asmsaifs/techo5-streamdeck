@@ -1,6 +1,6 @@
 // What the Go side says an action looks like (internal/actions/schema.go), and the checks the
 // editor can do from it before anything is saved.
-import { tileProblem } from "./model";
+import { ruleProblem, tileProblem } from "./model";
 import type { Action, Config } from "./model";
 
 export interface Field {
@@ -60,6 +60,10 @@ export function actionProblems(schemas: Schemas, a: Action, where = ""): string[
 
 /** The first problem in any button of the config, as "page home, cell 1,0: ...", or null. */
 export function firstProblem(schemas: Schemas, cfg: Config): string | null {
+  for (const [i, r] of (cfg.autoSwitch ?? []).entries()) {
+    const bad = ruleProblem(cfg, r);
+    if (bad) return `Profile by application, rule ${i + 1}: ${bad}`;
+  }
   for (const [pn, p] of Object.entries(cfg.profiles)) {
     for (const [gn, pg] of Object.entries(p.pages)) {
       for (const [key, b] of Object.entries(pg.buttons)) {

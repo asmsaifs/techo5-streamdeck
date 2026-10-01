@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Device, Settings } from "./api";
 import { devices, errorText, regenerateKey, setListen, settings } from "./api";
-import { secretStatus, setSecret } from "./api";
+import { frontApp, secretStatus, setSecret } from "./api";
 import type { SecretStatus } from "./api";
 import * as m from "./model";
 
@@ -155,6 +155,7 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
           </>
         )}
 
+        <AutoSwitch cfg={p.cfg} edit={p.edit} say={p.say} />
         <Integrations cfg={p.cfg} edit={p.edit} say={p.say} />
       </div>
     </div>
@@ -203,6 +204,70 @@ function Integrations(p: { cfg: m.Config; edit: (c: m.Config) => void; say: Say 
         </div>
       </label>
       <p className="hint">Addresses are saved with the deck. Tokens and passwords go to the system keychain as soon as you press Keep, and are not in config.json.</p>
+    </>
+  );
+}
+
+/** Rules that give a Show another profile while an application is in front on this computer. */
+function AutoSwitch(p: { cfg: m.Config; edit: (c: m.Config) => void; say: Say }) {
+  const rules = p.cfg.autoSwitch ?? [];
+  const profiles = Object.keys(p.cfg.profiles);
+  const [waiting, setWaiting] = useState<number | null>(null);
+  const put = (i: number, patch: Partial<m.AutoRule>) => p.edit(m.setAutoSwitch(p.cfg, rules.map((r, j) => (j === i ? { ...r, ...patch } : r))));
+  const detect = (i: number) => {
+    setWaiting(i);
+    frontApp(4)
+      .then((a) => put(i, { app: a.Name || a.ID }))
+      .catch((e) => p.say({ kind: "err", text: errorText(e) }))
+      .finally(() => setWaiting(null));
+  };
+  const devices = Object.keys(p.cfg.devices ?? {});
+  return (
+    <>
+      <h3>Profile by application</h3>
+      <p className="hint">While one of these applications is in front on this computer, the Show uses the profile beside it. The first rule that fits wins; with none, a Show uses its own profile. Applies once you save.</p>
+      {rules.length > 0 && (
+        <table className="devices">
+          <tbody>
+            {rules.map((r, i) => {
+              const bad = m.ruleProblem(p.cfg, r);
+              return (
+                <tr key={i}>
+                  <td>
+                    <input className={bad && !r.app.trim() ? "bad" : ""} spellCheck={false} value={r.app} placeholder="Safari, code.exe…" onChange={(e) => put(i, { app: e.target.value })} />
+                  </td>
+                  <td>
+                    <button disabled={waiting !== null} title="Switch to the application within 4 seconds" onClick={() => detect(i)}>
+                      {waiting === i ? "Switch now…" : "Detect"}
+                    </button>
+                  </td>
+                  <td>
+                    <select value={r.profile} onChange={(e) => put(i, { profile: e.target.value })}>
+                      {profiles.map((n) => (
+                        <option key={n}>{n}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={r.device ?? ""} onChange={(e) => put(i, { device: e.target.value || undefined })}>
+                      <option value="">every Show</option>
+                      {[...new Set([...devices, ...(r.device ? [r.device] : [])])].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <button onClick={() => p.edit(m.setAutoSwitch(p.cfg, rules.filter((_, j) => j !== i)))}>✕</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <button onClick={() => p.edit(m.setAutoSwitch(p.cfg, [...rules, { app: "", profile: profiles[0] }]))}>Add rule</button>
     </>
   );
 }
