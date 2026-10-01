@@ -131,6 +131,30 @@ func (c *Core) Pause() {
 	<-done
 }
 
+// Rebind moves the server to another listen address: it stops, listens on addr, and keeps addr
+// as the one to use. If addr cannot be listened on the old address is back up and the error says
+// why, so a typo in the editor never leaves the deck down. Connected Shows are dropped and
+// reconnect by themselves.
+func (c *Core) Rebind(addr string) error {
+	c.mu.Lock()
+	old, wasRunning := c.listen, c.cancel != nil
+	c.mu.Unlock()
+	c.Pause()
+	c.mu.Lock()
+	c.listen = addr
+	c.mu.Unlock()
+	err := c.Start()
+	if err != nil {
+		c.mu.Lock()
+		c.listen = old
+		c.mu.Unlock()
+		if wasRunning {
+			_ = c.Start()
+		}
+	}
+	return err
+}
+
 // Running reports whether the server is listening.
 func (c *Core) Running() bool {
 	c.mu.Lock()

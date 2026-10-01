@@ -25,6 +25,10 @@ const schemas = [
 const icon = (d: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="${d}"/></svg>`;
 
 const handlers: Record<string, (...a: any[]) => unknown> = {
+  Settings: () => ({ Listen: "0.0.0.0:9555", Key: "mock-key-0123456789abcdef", Running: true, Address: "192.168.1.20:9555" }),
+  Devices: () => [{ Name: "Kitchen Show", Addr: "192.168.1.31:51234", W: 960, H: 480, Profile: "default", Source: "deck", Since: "", Bytes: Date.now() % 100000 * 40, Frames: Math.floor(Date.now() / 100) % 100000 }],
+  SetListen: () => undefined,
+  RegenerateKey: () => "mock-key-new",
   Config: () => JSON.stringify(cfg),
   Save: (j: string) => void (cfg = JSON.parse(j)),
   Schemas: () => schemas,

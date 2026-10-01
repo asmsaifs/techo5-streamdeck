@@ -566,7 +566,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 2.1 Wails shell + tray — serves the deck and quits cleanly (smoke-tested); tray menu, hide-on-close and start-at-login need a hands-on check
 - [x] 2.2 Grid editor — pages, drag-drop grid, preview from the Go renderer, undo/redo, copy/paste, grid and theme; seen in the real window. Nested-folder tree and per-device preview size open
 - [x] 2.3 Inspector + icon picker — schema-driven forms, key recorder, Test button, run-command confirm on save, icon picker (Lucide search + upload). Emoji icons still not drawn; icon/background colour and label size open
-- [ ] 2.4 Devices + settings → **v0.2.0**
+- [x] 2.4 Devices + settings → **v0.2.0** (not tagged yet, same wait as v0.1.0 for the real Show check). Live fps/bit rate, profile per Show, new/delete profile, listen address, key show/regenerate, copyable setup text
 - [ ] 3.1 Global hotkeys + `trigger` CLI
 - [ ] 3.2 Media/volume/mic/system
 - [ ] 3.3 HTTP / Home Assistant / OBS

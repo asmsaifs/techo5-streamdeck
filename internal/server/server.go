@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
@@ -39,6 +40,21 @@ type session struct {
 	since  time.Time
 	deck   *deckview.Source
 	cancel context.CancelFunc
+	// Counters for the devices panel, which turns two readings into a rate.
+	bytes  *atomic.Uint64
+	frames atomic.Uint64
+}
+
+// countConn counts the bytes written to a Show.
+type countConn struct {
+	net.Conn
+	n *atomic.Uint64
+}
+
+func (c countConn) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	c.n.Add(uint64(n))
+	return n, err
 }
 
 // Info describes a connected Show, for the devices panel.
@@ -47,7 +63,10 @@ type Info struct {
 	Addr    string
 	W, H    int
 	Profile string
+	Source  string // what it is showing now: "deck"
 	Since   time.Time
+	// Totals since it connected: bytes written to the Show, and pictures sent.
+	Bytes, Frames uint64
 }
 
 func (s *Server) log() *slog.Logger {
@@ -100,7 +119,8 @@ func (s *Server) Sessions() []Info {
 	var out []Info
 	for se := range s.sessions {
 		out = append(out, Info{Name: se.hello.Name, Addr: se.from.String(), W: se.hello.W, H: se.hello.H,
-			Profile: s.Config().ProfileFor(se.hello.Name), Since: se.since})
+			Profile: s.Config().ProfileFor(se.hello.Name), Source: "deck", Since: se.since,
+			Bytes: se.bytes.Load(), Frames: se.frames.Load()})
 	}
 	return out
 }
@@ -115,8 +135,9 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 		_ = tc.SetKeepAlivePeriod(30 * time.Second)
 	}
 	cfg := s.Config()
+	var sent atomic.Uint64
 	_ = raw.SetDeadline(time.Now().Add(10 * time.Second))
-	c, err := wire.ServerHandshake(raw, cfg.Server.Key)
+	c, err := wire.ServerHandshake(countConn{raw, &sent}, cfg.Server.Key)
 	if err != nil {
 		s.log().Warn("handshake failed: a wrong key, or not a TECHO5 device", "from", from, "err", err)
 		return
@@ -152,6 +173,7 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 	defer src.Close()
 
 	se := &session{hello: h, from: from, since: time.Now(), deck: d, cancel: cancel}
+	se.bytes = &sent
 	s.add(se)
 	defer s.remove(se)
 	s.log().Info("connected", "from", from, "name", h.Name, "w", h.W, "h", h.H, "profile", name, "caps", h.Caps)
@@ -163,6 +185,7 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 		defer cancel() // a picture that cannot be sent ends the session
 		defer raw.Close()
 		for img := range src.Frames() {
+			se.frames.Add(1)
 			if err := enc.Send(img); err != nil {
 				s.log().Warn("send", "name", h.Name, "err", err)
 				return

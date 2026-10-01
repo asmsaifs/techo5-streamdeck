@@ -3,6 +3,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionForm } from "./ActionForm";
 import { errorText, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
+import { DevicesPanel } from "./DevicesPanel";
 import { IconPicker } from "./IconPicker";
 import { cellRects } from "./layout";
 import * as m from "./model";
@@ -22,6 +23,7 @@ export function App() {
   const [clip, setClip] = useState<m.Button | null>(null);
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
   const [schemas, setSchemas] = useState<Schemas>({});
+  const [showDevices, setShowDevices] = useState(false);
 
   useEffect(() => {
     loadSchemas()
@@ -100,7 +102,33 @@ export function App() {
             <option key={p}>{p}</option>
           ))}
         </select>
+        <button
+          onClick={() => {
+            const n = window.prompt(`New profile (a copy of "${profile}")`)?.trim();
+            if (n === undefined || n === null) return;
+            const why = m.profileNameProblem(cfg, n);
+            if (why) return setMsg({ kind: "err", text: why });
+            edit(m.addProfile(cfg, n, profile));
+            setProfile(n);
+            setPage(m.HOME);
+          }}
+        >
+          New profile
+        </button>
+        <button
+          onClick={() => {
+            const why = m.profileDeleteBlocker(cfg, profile);
+            if (why) return setMsg({ kind: "err", text: why });
+            if (!window.confirm(`Delete profile "${profile}"?`)) return;
+            edit(m.deleteProfile(cfg, profile));
+            setProfile("default");
+            setPage(m.HOME);
+          }}
+        >
+          Delete profile
+        </button>
         <span className="spacer" />
+        <button onClick={() => setShowDevices(true)}>Shows…</button>
         <button disabled={!hist || !hist.past.length} onClick={() => setHist(m.undo(hist!))}>
           Undo
         </button>
@@ -111,6 +139,7 @@ export function App() {
           {dirty ? "Save" : "Saved"}
         </button>
       </header>
+      {showDevices && <DevicesPanel cfg={cfg} edit={edit} say={setMsg} onClose={() => setShowDevices(false)} />}
       {msg && (
         <p className={`msg ${msg.kind}`} onClick={() => setMsg(null)}>
           {msg.text}

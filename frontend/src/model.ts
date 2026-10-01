@@ -235,3 +235,57 @@ export function newRunCommands(saved: Config, next: Config): string[] {
   });
   return out;
 }
+
+/** Gives the Show called `name` a profile. Naming the default profile removes the entry, since a
+ * Show the config does not name gets it anyway. */
+export function setDeviceProfile(cfg: Config, name: string, profile: string): Config {
+  const next = clone(cfg);
+  next.devices ??= {};
+  next.devices[name] = { profile };
+  return next;
+}
+
+export function forgetDevice(cfg: Config, name: string): Config {
+  const next = clone(cfg);
+  if (next.devices) delete next.devices[name];
+  return next;
+}
+
+/** A new profile that starts as a copy of `from`. */
+export function addProfile(cfg: Config, name: string, from: string): Config {
+  const next = clone(cfg);
+  next.profiles[name] = clone(next.profiles[from]);
+  return next;
+}
+
+export function profileNameProblem(cfg: Config, name: string): string | null {
+  if (!name.trim()) return "A profile needs a name.";
+  if (name in cfg.profiles) return `There is already a profile "${name}".`;
+  return null;
+}
+
+/** Devices that use a profile, so it is not deleted from under them. */
+export function profileUsers(cfg: Config, profile: string): string[] {
+  return Object.entries(cfg.devices ?? {}).filter(([, d]) => d.profile === profile).map(([n]) => n);
+}
+
+export function deleteProfile(cfg: Config, profile: string): Config {
+  const next = clone(cfg);
+  delete next.profiles[profile];
+  return next;
+}
+
+/** Why a profile cannot be deleted, or null when it can. */
+export function profileDeleteBlocker(cfg: Config, profile: string): string | null {
+  if (profile === "default") return `"default" is the profile a Show gets when the config does not name it.`;
+  const users = profileUsers(cfg, profile);
+  if (users.length) return `${users.join(", ")} uses it. Give ${users.length > 1 ? "them" : "it"} another profile first.`;
+  return null;
+}
+
+/** What the connection rate of a Show is, from two readings of its totals. */
+export function rate(prev: { t: number; bytes: number; frames: number } | undefined, now: { t: number; bytes: number; frames: number }) {
+  if (!prev || now.t <= prev.t || now.bytes < prev.bytes) return { kbps: 0, fps: 0 };
+  const s = (now.t - prev.t) / 1000;
+  return { kbps: ((now.bytes - prev.bytes) * 8) / 1000 / s, fps: (now.frames - prev.frames) / s };
+}

@@ -186,6 +186,8 @@ func TestDeckOnTheWire(t *testing.T) {
 	}
 	if got := srv.Sessions(); len(got) != 1 || got[0].Name != "Kitchen" || got[0].Profile != "default" || got[0].W != 960 {
 		t.Errorf("sessions %+v", got)
+	} else if got[0].Source != "deck" || got[0].Frames == 0 || got[0].Bytes == 0 {
+		t.Errorf("the panel's counters are empty after a picture was sent: %+v", got[0])
 	}
 
 	// A tap on an action button runs it on the computer.

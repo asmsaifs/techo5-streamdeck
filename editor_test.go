@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"strings"
 	"testing"
 
@@ -66,5 +67,34 @@ func TestEditorSaveAndPreview(t *testing.T) {
 		if (err == nil) != tc.ok || tc.ok && !strings.HasPrefix(got, "data:image/png;base64,") {
 			t.Errorf("%s: got %.30q, %v", tc.name, got, err)
 		}
+	}
+}
+
+func TestSettingsAndKey(t *testing.T) {
+	e := newEditor(t)
+	old := e.Settings()
+	if len(old.Key) < 16 || old.Address == "" {
+		t.Fatalf("settings: %+v", old)
+	}
+	k, err := e.RegenerateKey()
+	if err != nil || k == old.Key || e.Settings().Key != k {
+		t.Fatalf("regenerate: %q (was %q), %v", k, old.Key, err)
+	}
+	for _, bad := range []string{"", "9555", "0.0.0.0:0", "0.0.0.0:99999", "host.local:9555"} {
+		if err := e.SetListen(bad); err == nil {
+			t.Errorf("SetListen(%q) accepted", bad)
+		}
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	free := l.Addr().String()
+	l.Close()
+	if err := e.SetListen(free); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Settings().Listen; got != free {
+		t.Fatalf("listen not saved: %q", got)
 	}
 }

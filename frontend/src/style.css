@@ -61,3 +61,9 @@ input.bad, select.bad, textarea.bad { border-color: var(--err); }
 .testout.err { background: #e5484d22; color: #ff9a9d; }
 .testout.ok { background: #2fbf7122; color: #7ee2ad; }
 .cmd { font: 12px ui-monospace, monospace; white-space: pre-wrap; background: var(--bg); padding: 6px 8px; border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+th { text-align: left; color: var(--dim); font-weight: 500; padding: 4px 6px; }
+td { padding: 4px 6px; border-top: 1px solid var(--line); }
+.dim { color: var(--dim); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); margin-right: 4px; }
+.dot.on { background: var(--ok); }

@@ -89,3 +89,25 @@ describe("run confirmation", () => {
     expect(m.newRunCommands(next, next)).toEqual([]);
   });
 });
+
+describe("profiles and devices", () => {
+  it("copies, guards and deletes profiles", () => {
+    const c = m.setDeviceProfile(base(), "Kitchen", "kids");
+    const withKids = m.addProfile(c, "kids", "default");
+    expect(Object.keys(withKids.profiles)).toEqual(["default", "kids"]);
+    withKids.profiles.kids.grid.cols = 2;
+    expect(withKids.profiles.default.grid.cols).toBe(5); // a copy, not the same object
+    expect(m.profileDeleteBlocker(withKids, "default")).toMatch(/default/);
+    expect(m.profileDeleteBlocker(withKids, "kids")).toMatch(/Kitchen/);
+    expect(m.profileDeleteBlocker(m.forgetDevice(withKids, "Kitchen"), "kids")).toBeNull();
+    expect(m.profileNameProblem(withKids, "kids")).not.toBeNull();
+    expect(m.profileNameProblem(withKids, "new")).toBeNull();
+  });
+
+  it("turns two readings into a rate, and survives a reconnect", () => {
+    const a = { t: 0, bytes: 0, frames: 0 };
+    expect(m.rate(a, { t: 2000, bytes: 250_000, frames: 60 })).toEqual({ kbps: 1000, fps: 30 });
+    expect(m.rate(undefined, a)).toEqual({ kbps: 0, fps: 0 });
+    expect(m.rate({ t: 0, bytes: 900, frames: 9 }, { t: 1000, bytes: 10, frames: 1 })).toEqual({ kbps: 0, fps: 0 });
+  });
+});
