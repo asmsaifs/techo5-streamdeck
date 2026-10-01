@@ -352,3 +352,49 @@ func obsCall(ctx context.Context, wsURL, password, typ string, data map[string]a
 	}
 	return nil
 }
+
+// HAState reads a Home Assistant entity for a live tile: its state, with its unit when it has one
+// ("21.5 °C").
+func (r *Registry) HAState(ctx context.Context, entity string) (string, error) {
+	if !haService.MatchString(entity) { // the same shape as a service: domain.name
+		return "", fmt.Errorf("entity %q is not like sensor.kitchen_temperature", entity)
+	}
+	base := strings.TrimRight(strings.TrimSpace(r.integrations().HomeAssistant), "/")
+	if base == "" {
+		return "", errors.New("the Home Assistant address is not set")
+	}
+	if r.dry() {
+		return "dry run", nil
+	}
+	token, err := r.secret(secrets.HomeAssistantToken, "the Home Assistant token")
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", base+"/api/states/"+entity, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", redact(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxReply))
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("%s%s", resp.Status, tail(body))
+	}
+	var st struct {
+		State      string `json:"state"`
+		Attributes struct {
+			Unit string `json:"unit_of_measurement"`
+		} `json:"attributes"`
+	}
+	if err := json.Unmarshal(body, &st); err != nil {
+		return "", errors.New("Home Assistant sent something that is not a state")
+	}
+	if st.Attributes.Unit != "" {
+		return st.State + " " + st.Attributes.Unit, nil
+	}
+	return st.State, nil
+}

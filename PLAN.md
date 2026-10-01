@@ -570,7 +570,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 3.1 Global hotkeys + `trigger` CLI — Wails GlobalShortcut kept in step with config.json (internal/hotkeys), inspector field with recorder, `trigger` over control.sock, tested on the real binary with the CLI; a real key press and a Wayland check are open
 - [x] 3.2 Media/volume/mic/system — commands per OS tested with a fake runner; macOS volume checked for real. Hands-on checklist in docs/actions.md; Windows has no mic mute and a stepped volume.set (Core Audio open); Linux untested
 - [x] 3.3 HTTP / Home Assistant / OBS — http, ha.service, obs; addresses in config, secrets in the OS keychain; tested against fake servers and a real local webhook/keychain, not yet against a real Home Assistant or OBS
-- [ ] 3.4 Live tiles
+- [x] 3.4 Live tiles — clock, cpu, ram, ha_state (polled, not subscribed), script, and a state tile that makes toggles follow the real state; shared cache, only the shown page is read
 - [ ] 3.5 Profile auto-switch
 - [ ] 4.1 WebSource (dashcast port)
 - [ ] 4.2 Live view chip + back gesture

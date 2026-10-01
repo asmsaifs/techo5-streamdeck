@@ -161,6 +161,9 @@ func (c *Config) validateProfile(path string, p *Profile, add func(path, format 
 			if b.Action != nil {
 				validateAction(bpath+".action", b.Action, p, add)
 			}
+			if b.Tile != nil {
+				validateTile(bpath+".tile", b.Tile, add)
+			}
 		}
 	}
 }
@@ -215,4 +218,33 @@ func Decode(b []byte) (*Config, error) {
 		return nil, errors.New("something follows the config's closing }")
 	}
 	return &c, nil
+}
+
+var clockFormats = map[string]bool{"": true, "24h": true, "12h": true, "24h-seconds": true, "date": true}
+
+var entityID = regexp.MustCompile(`^[a-z0-9_]+\.[a-z0-9_]+$`)
+
+func validateTile(path string, t *Tile, add func(path, format string, args ...any)) {
+	if t.Every != 0 && (t.Every < 1 || t.Every > 3600) {
+		add(path+".every", "is %v; it must be 1 to 3600 seconds", t.Every)
+	}
+	switch t.Type {
+	case TileClock:
+		if !clockFormats[t.Format] {
+			add(path+".format", "%q is not 24h, 12h, 24h-seconds or date", t.Format)
+		}
+	case TileCPU, TileRAM:
+	case TileHA:
+		if !entityID.MatchString(t.Entity) {
+			add(path+".entity", "%q is not an entity like sensor.kitchen_temperature", t.Entity)
+		}
+	case TileScript, TileState:
+		if strings.TrimSpace(t.Command) == "" {
+			add(path+".command", "is missing")
+		}
+	case "":
+		add(path+".type", "is missing")
+	default:
+		add(path+".type", "%q is not clock, cpu, ram, ha_state, script or state", t.Type)
+	}
 }

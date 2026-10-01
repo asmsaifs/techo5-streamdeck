@@ -1,5 +1,6 @@
 // What the Go side says an action looks like (internal/actions/schema.go), and the checks the
 // editor can do from it before anything is saved.
+import { tileProblem } from "./model";
 import type { Action, Config } from "./model";
 
 export interface Field {
@@ -62,6 +63,8 @@ export function firstProblem(schemas: Schemas, cfg: Config): string | null {
   for (const [pn, p] of Object.entries(cfg.profiles)) {
     for (const [gn, pg] of Object.entries(p.pages)) {
       for (const [key, b] of Object.entries(pg.buttons)) {
+        const tile = b.tile ? tileProblem(b.tile) : null;
+        if (tile) return `Profile ${pn}, page ${gn}, cell ${key}: ${tile}`;
         if (!b.action) continue;
         const [first] = actionProblems(schemas, b.action);
         if (first) return `Profile ${pn}, page ${gn}, cell ${key}: ${first}`;

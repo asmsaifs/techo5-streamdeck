@@ -9,6 +9,43 @@ export interface Button {
   label?: string;
   icon?: string;
   action?: Action;
+  tile?: Tile;
+}
+
+/** What a live button shows: a value read again every few seconds. */
+export interface Tile {
+  type: string;
+  every?: number;
+  format?: string;
+  entity?: string;
+  command?: string;
+  args?: string[];
+  shell?: boolean;
+}
+
+export const TILE_TYPES: Record<string, string> = {
+  clock: "Clock",
+  cpu: "Processor load",
+  ram: "Memory use",
+  ha_state: "Home Assistant state",
+  script: "Command output",
+  state: "Toggle state (a command says if it is on)",
+};
+
+/** What a tile of this type needs before it is worth saving, or null. */
+export function tileProblem(t: Tile): string | null {
+  if (t.every !== undefined && (t.every < 1 || t.every > 3600)) return "Every must be 1 to 3600 seconds.";
+  if (t.type === "ha_state" && !/^[a-z0-9_]+\.[a-z0-9_]+$/.test(t.entity ?? "")) return "Entity looks like sensor.kitchen_temperature.";
+  if ((t.type === "script" || t.type === "state") && !(t.command ?? "").trim()) return "A command is needed.";
+  return null;
+}
+
+/** Sets or, for null, removes a button's tile. */
+export function setTile(b: Button, t: Tile | null): Button {
+  const next = { ...b };
+  if (t) next.tile = t;
+  else delete next.tile;
+  return next;
 }
 export interface Page {
   buttons: Record<string, Button>;

@@ -34,6 +34,8 @@ type CellState struct {
 	On       bool  // a toggle that is on: ringed in the accent colour
 	Flash    Flash // the result of the action that just ran
 	Disabled bool  // greyed out
+	// Text is a live tile's value, drawn big where the icon would be (and instead of it).
+	Text string
 }
 
 // State is the CellState of the cells that are not plain. A cell not in it is plain.
@@ -206,10 +208,23 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 	}
 	labelH := lineH * float64(len(lines))
 
+	// A live tile's value takes the place of the icon.
+	var vLines []string
+	var vPx int
+	var vLineH float64
+	if st.Text != "" {
+		base := 0.30 * h
+		if b.Label == "" {
+			base = 0.38 * h
+		}
+		vLines, vPx = fitLabel(st.Text, w-2*pad, base, measure)
+		vLineH = float64(vPx) * 1.2
+	}
+
 	var ic *image.RGBA
 	var iconSize float64
 	iconCY := cy
-	if b.Icon != "" {
+	if b.Icon != "" && st.Text == "" {
 		if len(lines) == 0 {
 			iconSize = 0.6 * min(w, h)
 		} else {
@@ -227,12 +242,27 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 		draw.DrawMask(img, at, ic, image.Point{}, image.NewUniform(color.Alpha{alpha}), image.Point{}, draw.Over)
 	}
 
+	if len(vLines) > 0 {
+		dc.SetFontFace(face(vPx))
+		dc.SetColor(fg)
+		mid := cy
+		if len(lines) > 0 {
+			top := y0 + 0.08*h
+			bottom := y0 + h - 0.07*h - labelH - 0.04*h
+			mid = (top + bottom) / 2
+		}
+		ty := mid - vLineH*float64(len(vLines))/2
+		for i, line := range vLines {
+			dc.DrawStringAnchored(line, cx, ty+vLineH*(float64(i)+0.5), 0.5, 0.35)
+		}
+	}
+
 	if len(lines) > 0 {
 		dc.SetFontFace(face(px))
 		dc.SetColor(fg)
 		// Centred in the room below the icon, or in the whole cell when there is no icon.
 		ty := cy - labelH/2
-		if ic != nil {
+		if ic != nil || len(vLines) > 0 {
 			ty = y0 + h - 0.07*h - labelH
 		}
 		for i, line := range lines {

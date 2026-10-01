@@ -323,3 +323,30 @@ func golden(t *testing.T, name string, img *image.RGBA) {
 		t.Errorf("%s: %d pixels differ from the golden; got is at %s", name, bad, out)
 	}
 }
+
+// A live tile's value is drawn big in place of the icon, over the label when there is one.
+func TestTileGolden(t *testing.T) {
+	r := New(t.TempDir())
+	p := &deck.Profile{Grid: deck.DefaultGrid, Theme: deck.DefaultTheme}
+	pg := &deck.Page{Buttons: map[string]*deck.Button{
+		"0,0": {Label: "Time", Icon: "lucide:clock"},
+		"1,0": {Label: "CPU"},
+		"2,0": {},
+		"3,0": {Label: "Living room", Icon: "lucide:sun"},
+		"4,0": {Label: "Build"},
+	}}
+	st := State{
+		{Col: 0, Row: 0}: {Text: "14:05"},
+		{Col: 1, Row: 0}: {Text: "37%"},
+		{Col: 2, Row: 0}: {Text: "Mon 2 Jan"},
+		{Col: 3, Row: 0}: {Text: "21.5 °C"},
+		{Col: 4, Row: 0}: {Text: "passing, 12 min ago on main", On: true},
+	}
+	golden(t, "tiles-960x480.png", r.Grid(p, pg, image.Pt(960, 480), st))
+	// The text replaces the icon: the same button without it looks different.
+	with := r.Cell(p, pg.Buttons["0,0"], deck.Cell{}, image.Pt(960, 480), CellState{Text: "14:05"})
+	without := r.Cell(p, pg.Buttons["0,0"], deck.Cell{}, image.Pt(960, 480), CellState{})
+	if bytes.Equal(with.Pix, without.Pix) {
+		t.Error("Text changed nothing")
+	}
+}

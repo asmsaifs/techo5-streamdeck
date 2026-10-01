@@ -27,7 +27,9 @@ type Server struct {
 	// Runner runs the buttons' actions. May be nil.
 	Runner   deckview.Runner
 	Renderer *render.Renderer
-	Log      *slog.Logger
+	// Tiles reads the values of live tiles, shared by every Show. May be nil: tiles show nothing.
+	Tiles deckview.Tiler
+	Log   *slog.Logger
 
 	mu       sync.Mutex
 	sessions map[*session]struct{}
@@ -164,6 +166,7 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 	defer cancel()
 	var src sources.Source
 	d := deckview.New(s.Config, name, s.Renderer, s.Runner, s.log().With("show", h.Name))
+	d.Tiles = s.Tiles
 	src = d
 	if err := src.Start(ctx, image.Pt(h.W, h.H)); err != nil {
 		s.log().Warn("source", "err", err)

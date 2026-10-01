@@ -10,6 +10,7 @@ import (
 
 	model "github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
+	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
 )
 
@@ -339,4 +340,154 @@ func TestToggleIsRinged(t *testing.T) {
 	if !same(next(t, s), want) {
 		t.Error("the ring did not stay after the flash")
 	}
+}
+
+type fakeTiles struct {
+	mu    sync.Mutex
+	vals  map[string]tiles.Value // by the tile's command
+	reads []string
+}
+
+func (f *fakeTiles) Get(_ context.Context, t *model.Tile) tiles.Value {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reads = append(f.reads, t.Command)
+	return f.vals[t.Command]
+}
+
+func (f *fakeTiles) set(cmd string, v tiles.Value) {
+	f.mu.Lock()
+	f.vals[cmd] = v
+	f.mu.Unlock()
+}
+
+func (f *fakeTiles) readList() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.reads...)
+}
+
+type onRunner struct {
+	fakeRunner
+	mu2 sync.Mutex
+	on  map[string]bool
+}
+
+func (o *onRunner) SetOn(key string, on bool) {
+	o.mu2.Lock()
+	defer o.mu2.Unlock()
+	o.on[key] = on
+}
+
+func startTiles(t *testing.T, c *model.Config, run Runner, tl Tiler) (*Source, *render.Renderer) {
+	t.Helper()
+	r := render.New(t.TempDir())
+	s := New(func() *model.Config { return c }, "default", r, run, nil)
+	s.Tiles = tl
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := s.Start(ctx, size); err != nil {
+		t.Fatal(err)
+	}
+	return s, r
+}
+
+const tileDeck = `{"default":{"pages":{
+	"home":{"buttons":{
+		"0,0":{"label":"Mail","tile":{"type":"script","command":"mail","every":1}},
+		"1,0":{"label":"Mic","tile":{"type":"state","command":"micstate","every":1},"action":{"type":"toggle","on":{"type":"delay","ms":0},"off":{"type":"delay","ms":0}}},
+		"2,0":{"label":"Apps","action":{"type":"page","page":"apps"}}}},
+	"apps":{"buttons":{"0,0":{"label":"Load","tile":{"type":"script","command":"load","every":1}}}}}}}`
+
+func TestTileValueIsDrawnAndUpdated(t *testing.T) {
+	c := testConfig(t, tileDeck)
+	prof := c.Profiles["default"]
+	ft := &fakeTiles{vals: map[string]tiles.Value{"mail": {Text: "3 new"}, "micstate": {On: new(bool)}}}
+	s, r := startTiles(t, c, &fakeRunner{}, ft)
+
+	want := func(text string, micOn bool) *image.RGBA {
+		return r.Grid(prof, prof.Pages["home"], size, render.State{
+			{Col: 0, Row: 0}: {Text: text},
+			{Col: 1, Row: 0}: {On: micOn},
+		})
+	}
+	// Frames arrive as readings do; the last one is what counts.
+	settle := func(w *image.RGBA) {
+		t.Helper()
+		deadline := time.After(4 * time.Second)
+		for {
+			select {
+			case img := <-s.Frames():
+				if same(img, w) {
+					return
+				}
+			case <-deadline:
+				t.Fatal("the deck never showed the expected tiles")
+			}
+		}
+	}
+	settle(want("3 new", false))
+
+	ft.set("mail", tiles.Value{Text: "5 new"})
+	settle(want("5 new", false)) // read again after its second
+
+	on := true
+	ft.set("micstate", tiles.Value{On: &on})
+	settle(want("5 new", true))
+
+	ft.set("mail", tiles.Value{Err: errors.New("boom")})
+	settle(want("—", true))
+}
+
+func TestStateTileTellsTheToggle(t *testing.T) {
+	c := testConfig(t, tileDeck)
+	on := true
+	ft := &fakeTiles{vals: map[string]tiles.Value{"micstate": {On: &on}}}
+	run := &onRunner{on: map[string]bool{}}
+	startTiles(t, c, run, ft)
+	time.Sleep(400 * time.Millisecond)
+	run.mu2.Lock()
+	defer run.mu2.Unlock()
+	if !run.on["default/home/1,0"] {
+		t.Errorf("the toggle was told %v, want default/home/1,0 on", run.on)
+	}
+}
+
+func TestOnlyTheShownPageIsRead(t *testing.T) {
+	c := testConfig(t, tileDeck)
+	prof := c.Profiles["default"]
+	ft := &fakeTiles{vals: map[string]tiles.Value{"load": {Text: "12%"}}}
+	s, _ := startTiles(t, c, &fakeRunner{}, ft)
+	time.Sleep(400 * time.Millisecond)
+	for _, r := range ft.readList() {
+		if r == "load" {
+			t.Fatal("a tile on a page that is not shown was read")
+		}
+	}
+	tapAt(s, model.Cell{Col: 2, Row: 0}, prof)
+	deadline := time.After(2 * time.Second)
+	for {
+		found := false
+		for _, r := range ft.readList() {
+			found = found || r == "load"
+		}
+		if found {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("opening the page did not read its tile at once")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
+
+func TestNoTilerShowsNoValue(t *testing.T) {
+	c := testConfig(t, tileDeck)
+	prof := c.Profiles["default"]
+	s, r := start(t, c, nil)
+	if !same(next(t, s), r.Grid(prof, prof.Pages["home"], size, nil)) {
+		t.Error("tiles with no reader changed the picture")
+	}
+	quiet(t, s)
 }

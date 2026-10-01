@@ -237,3 +237,38 @@ func TestOBSAuthMatchesTheProtocolExample(t *testing.T) {
 		t.Errorf("auth = %s, want %s", got, want)
 	}
 }
+
+func TestHAState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
+		if q.Header.Get("Authorization") != "Bearer tok" {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		switch q.URL.Path {
+		case "/api/states/sensor.t":
+			w.Write([]byte(`{"state":"21.5","attributes":{"unit_of_measurement":"°C"}}`))
+		case "/api/states/light.k":
+			w.Write([]byte(`{"state":"on","attributes":{}}`))
+		default:
+			http.Error(w, "Entity not found.", 404)
+		}
+	}))
+	defer srv.Close()
+	r, st := netReg(&deck.Integrations{HomeAssistant: srv.URL})
+	ctx := context.Background()
+	if _, err := r.HAState(ctx, "sensor.t"); err == nil || !strings.Contains(err.Error(), "token") {
+		t.Errorf("no token: %v", err)
+	}
+	st.Set(secrets.HomeAssistantToken, "tok")
+	for entity, want := range map[string]string{"sensor.t": "21.5 °C", "light.k": "on"} {
+		if got, err := r.HAState(ctx, entity); err != nil || got != want {
+			t.Errorf("%s = %q, %v; want %q", entity, got, err, want)
+		}
+	}
+	if _, err := r.HAState(ctx, "sensor.gone"); err == nil || !strings.Contains(err.Error(), "404") {
+		t.Errorf("unknown entity: %v", err)
+	}
+	if _, err := r.HAState(ctx, "../states"); err == nil {
+		t.Error("a path was taken for an entity")
+	}
+}

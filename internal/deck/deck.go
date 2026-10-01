@@ -89,6 +89,29 @@ type Button struct {
 	Label  string  `json:"label,omitempty"`
 	Icon   string  `json:"icon,omitempty"` // "lucide:youtube", an emoji, or a file in icons/
 	Action *Action `json:"action,omitempty"`
+	// Tile makes the button live: its big text is a value that is read again every few seconds.
+	Tile *Tile `json:"tile,omitempty"`
+}
+
+// Tile types.
+const (
+	TileClock  = "clock"    // the time; Format picks how
+	TileCPU    = "cpu"      // processor load, in percent
+	TileRAM    = "ram"      // memory in use, in percent
+	TileHA     = "ha_state" // a Home Assistant entity's state, Entity
+	TileScript = "script"   // the first line a command prints
+	TileState  = "state"    // no text: a command says whether the button's toggle is really on
+)
+
+// Tile is what a live button shows. Only the parameters of its Type are used.
+type Tile struct {
+	Type    string   `json:"type"`
+	Every   float64  `json:"every,omitempty"`   // seconds between readings; each type has a default
+	Format  string   `json:"format,omitempty"`  // clock: 24h (default), 12h, 24h-seconds, date
+	Entity  string   `json:"entity,omitempty"`  // ha_state: "sensor.living_room_temperature"
+	Command string   `json:"command,omitempty"` // script and state
+	Args    []string `json:"args,omitempty"`
+	Shell   bool     `json:"shell,omitempty"` // Command is a line for the shell
 }
 
 // Action is what a button does: its type, and the rest of its JSON as it was written, for the

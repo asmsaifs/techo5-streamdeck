@@ -16,6 +16,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	model "github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
+	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
 )
 
@@ -29,6 +30,18 @@ type Runner interface {
 // with that key (actions.ButtonKey) is on, so the deck can ring it.
 type Toggler interface {
 	On(key string) bool
+}
+
+// Tiler reads the values of live tiles; tiles.Cache is the real one. Shows share one, so a tile
+// that two of them display is read once.
+type Tiler interface {
+	Get(ctx context.Context, t *model.Tile) tiles.Value
+}
+
+// OnSetter is what a Runner that keeps toggle state also provides: to be told the state is really
+// on or off, as a state tile found it.
+type OnSetter interface {
+	SetOn(key string, on bool)
 }
 
 // How long a button shows each look after a tap. The Show sends a tap only when the finger lifts,
@@ -59,8 +72,13 @@ type Source struct {
 	// arrive after one drawn later.
 	renderMu sync.Mutex
 
+	// Tiles reads live tiles. Nil means buttons with a tile show no value. Set before Start.
+	Tiles Tiler
+	kick  chan struct{} // asks the tile loop to look at once, after a page change
+
 	mu    sync.Mutex
-	stack []string // the pages opened from home; empty on home
+	tvals map[string]*tileVal // the last reading of each tile, by "page/cell"
+	stack []string            // the pages opened from home; empty on home
 	state render.State
 	gen   map[model.Cell]int // which tap last set a cell's state, so an old timer cannot clear a new one
 }
@@ -72,7 +90,8 @@ func New(cfg func() *model.Config, profile string, r *render.Renderer, run Runne
 		log = slog.Default()
 	}
 	return &Source{cfg: cfg, profile: profile, r: r, run: run, log: log,
-		frames: make(chan *image.RGBA, 1), state: render.State{}, gen: map[model.Cell]int{}}
+		frames: make(chan *image.RGBA, 1), state: render.State{}, gen: map[model.Cell]int{},
+		kick: make(chan struct{}, 1), tvals: map[string]*tileVal{}}
 }
 
 func (s *Source) Start(ctx context.Context, size image.Point) error {
@@ -92,6 +111,9 @@ func (s *Source) Start(ctx context.Context, size image.Point) error {
 		s.renderMu.Unlock()
 	}()
 	s.Refresh()
+	if s.Tiles != nil {
+		go s.tileLoop()
+	}
 	return nil
 }
 
@@ -194,6 +216,29 @@ func (s *Source) Refresh() {
 			}
 		}
 	}
+	// A live tile's value is its button's text; a state tile says whether it is on.
+	s.mu.Lock()
+	for key, b := range pg.Buttons {
+		if b == nil || b.Tile == nil {
+			continue
+		}
+		tv := s.tvals[name+"/"+key]
+		c, err := model.ParseCell(key)
+		if tv == nil || tv.sig != tileSig(b.Tile) || err != nil {
+			continue
+		}
+		v := st[c]
+		switch {
+		case tv.val.Err != nil:
+			v.Text = "—"
+		case tv.val.On != nil:
+			v.On = *tv.val.On
+		default:
+			v.Text = tv.val.Text
+		}
+		st[c] = v
+	}
+	s.mu.Unlock()
 	img := s.r.Grid(p, pg, s.size, st)
 	// Latest wins: replace a frame the encoder has not taken yet.
 	select {
@@ -243,6 +288,7 @@ func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile, key s
 		s.forget()
 		s.mu.Unlock()
 		s.Refresh()
+		s.kickTiles()
 		return
 	case "back":
 		s.mu.Lock()
@@ -252,6 +298,7 @@ func (s *Source) press(cell model.Cell, a *model.Action, p *model.Profile, key s
 		s.forget()
 		s.mu.Unlock()
 		s.Refresh()
+		s.kickTiles()
 		return
 	}
 	go s.runAction(cell, a, key)
@@ -348,4 +395,96 @@ func (s *Source) put(c model.Cell, v render.CellState) {
 func (s *Source) forget() {
 	s.state = render.State{}
 	s.gen = map[model.Cell]int{}
+}
+
+// tileVal is the last reading of one tile.
+type tileVal struct {
+	sig  string // what was read, so an edited tile is not shown the old value
+	val  tiles.Value
+	at   time.Time
+	busy bool
+}
+
+func tileSig(t *model.Tile) string { return fmt.Sprintf("%+v", *t) }
+
+func (s *Source) kickTiles() {
+	select {
+	case s.kick <- struct{}{}:
+	default:
+	}
+}
+
+// tileLoop reads the tiles of the page being shown, each when its interval has passed, and redraws
+// when a value changed. Pages not shown are not read: a Show on the home page does not poll a
+// script that is on a sub-page. A slow reading never holds up the others or the deck.
+func (s *Source) tileLoop() {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		s.pollTiles()
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-tick.C:
+		case <-s.kick:
+		}
+	}
+}
+
+func (s *Source) pollTiles() {
+	p := s.profileNow()
+	if p == nil {
+		return
+	}
+	pg, name, _ := s.page(p)
+	if pg == nil {
+		return
+	}
+	for key, b := range pg.Buttons {
+		if b == nil || b.Tile == nil {
+			continue
+		}
+		cell, err := model.ParseCell(key)
+		if err != nil {
+			continue
+		}
+		tile, k, sig := b.Tile, name+"/"+key, tileSig(b.Tile)
+		s.mu.Lock()
+		tv := s.tvals[k]
+		if tv == nil || tv.sig != sig {
+			tv = &tileVal{sig: sig}
+			s.tvals[k] = tv
+		}
+		due := !tv.busy && (tv.at.IsZero() || time.Since(tv.at) >= tiles.Every(tile)-100*time.Millisecond)
+		if due {
+			tv.busy = true
+		}
+		s.mu.Unlock()
+		if due {
+			go s.readTile(tv, tile, name, cell)
+		}
+	}
+}
+
+func (s *Source) readTile(tv *tileVal, tile *model.Tile, page string, cell model.Cell) {
+	v := s.Tiles.Get(s.ctx, tile)
+	if s.ctx.Err() != nil {
+		return
+	}
+	s.mu.Lock()
+	old, first := tv.val, tv.at.IsZero()
+	tv.val, tv.at, tv.busy = v, time.Now(), false
+	s.mu.Unlock()
+
+	if v.Err != nil && (first || old.Err == nil || old.Err.Error() != v.Err.Error()) {
+		s.log.Warn("tile", "type", tile.Type, "cell", cell.String(), "err", v.Err)
+	}
+	if v.On != nil {
+		if o, ok := s.run.(OnSetter); ok {
+			o.SetOn(actions.ButtonKey(s.profile, page, cell), *v.On)
+		}
+	}
+	if first || v.Text != old.Text || (v.Err == nil) != (old.Err == nil) || (v.On == nil) != (old.On == nil) || (v.On != nil && *v.On != *old.On) {
+		s.Refresh()
+	}
 }

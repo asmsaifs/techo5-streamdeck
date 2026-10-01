@@ -25,7 +25,7 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 | `obs` | `command` (`scene`, `record.toggle/start/stop`, `stream.toggle/start/stop`, `input.mute.toggle`), `name` (scene or input) | OBS Studio's WebSocket v5 server (built in since OBS 28; Tools > WebSocket Server Settings). Address in Settings, password (if OBS has one) in the keychain. Connects for each press. |
 | `delay` | `ms` | 0 to 60000. For use in `multi`. |
 | `multi` | `steps` | Runs the steps in order and stops at the first that fails. |
-| `toggle` | `on`, `off` | Runs `on` when off and `off` when on; flips only if it worked. The deck ringed in the accent colour when on. Starts off and does not look at the computer, so it is out of step if the thing is changed another way. |
+| `toggle` | `on`, `off` | Runs `on` when off and `off` when on; flips only if it worked. The deck ringed in the accent colour when on. Starts off and does not look at the computer, so it is out of step if the thing is changed another way, unless the button has a `state` live tile (below). |
 
 A button flashes green when its action worked and red when it failed (the reason is in the log).
 The Show sends a tap only when the finger lifts, so the "pressed" look is a short flash after the
@@ -80,3 +80,26 @@ the Secret Service on Linux), are set from Settings > Integrations, and never co
 window or the config. With `-dry-run` these three actions only log. Checked for real so far: a
 webhook to a local server and the macOS keychain; OBS and Home Assistant are tested against fake
 servers (OBS's password hash is checked against the protocol document's example).
+
+## Live tiles
+
+Any button can have a `tile`: its big text is a value read again every few seconds, drawn where
+the icon would be (the label stays below). Set it in the inspector under "Live tile". The button
+can still have an action.
+
+| `tile.type` | Shows | Default interval |
+|---|---|---|
+| `clock` | the time; `format` is `24h`, `12h`, `24h-seconds` or `date` | 1 s |
+| `cpu`, `ram` | load and memory in use, in percent | 2 s, 5 s |
+| `ha_state` | a Home Assistant `entity`'s state with its unit ("21.5 °C"); address and token as for `ha.service` | 5 s |
+| `script` | the first line `command` (with `args`, or a `shell` line) prints, cut to 60 characters | 10 s |
+| `state` | nothing: whether the command says the button's toggle is really on (exit 0 and not "no", "false", "off" or "0") | 5 s |
+
+`every` (1 to 3600 s) changes the interval. Only the page a Show is on is read, a reading is shared
+by every Show that has it, and the picture is only resent when a value changed. A tile that cannot
+be read shows "—" and the reason is in the log once. A `state` tile makes a `toggle` button flip
+from what is true, which fixes the "out of step" caveat of toggles. Home Assistant is polled, not
+subscribed to. With `-dry-run`, script and state tiles do not run their command.
+
+Checked for real: clock, cpu, ram, script and state tiles over the wire to the fake Show. Home
+Assistant tiles only against a fake server.

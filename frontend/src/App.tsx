@@ -5,6 +5,7 @@ import { ActionForm, KeysInput } from "./ActionForm";
 import { errorText, hotkeyProblems, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
 import { DevicesPanel } from "./DevicesPanel";
 import { IconPicker } from "./IconPicker";
+import { TileForm } from "./TileForm";
 import { cellRects } from "./layout";
 import * as m from "./model";
 import { actionProblems, blankAction, bySchemaType, firstProblem } from "./schema";
@@ -403,6 +404,8 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
           onPick={(icon) => (set({ icon }), setPicking(false))}
         />
       )}
+
+      <TileForm tile={b?.tile} onChange={(t) => put(m.setTile(b ?? {}, t))} />
 
       {b?.action ? (
         <ActionForm

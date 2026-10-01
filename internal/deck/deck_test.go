@@ -150,6 +150,19 @@ func TestValidate(t *testing.T) {
 			"profiles":{"default":{"pages":{"home":{}}}}}`,
 			[]string{`integrations.homeassistant: "ftp://ha" is not an http:// or https:// address`,
 				`integrations.obs: "localhost" is not host:port, like localhost:4455`}},
+		{"tiles", `{"default":{"pages":{"home":{"buttons":{
+			"0,0":{"tile":{"type":"clock","format":"sundial"}},
+			"1,0":{"tile":{"type":"ha_state","entity":"Sensor Kitchen"}},
+			"2,0":{"tile":{"type":"script"}},
+			"3,0":{"tile":{"type":"weather"}},
+			"4,0":{"tile":{"type":"cpu","every":0.2}},
+			"0,1":{"tile":{"type":"ram","every":5}},
+			"1,1":{"tile":{"type":"state","command":"x"}}}}}}}`,
+			[]string{`profiles.default.pages.home.buttons.0,0.tile.format: "sundial" is not 24h, 12h, 24h-seconds or date`,
+				`profiles.default.pages.home.buttons.1,0.tile.entity: "Sensor Kitchen" is not an entity like sensor.kitchen_temperature`,
+				"profiles.default.pages.home.buttons.2,0.tile.command: is missing",
+				`profiles.default.pages.home.buttons.3,0.tile.type: "weather" is not clock, cpu, ram, ha_state, script or state`,
+				"profiles.default.pages.home.buttons.4,0.tile.every: is 0.2; it must be 1 to 3600 seconds"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

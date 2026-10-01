@@ -109,3 +109,11 @@ func (r *Registry) On(key string) bool {
 	defer r.mu.RUnlock()
 	return r.toggles[key]
 }
+
+// SetOn records that the toggle on the button with key is really on or off, as a state tile found
+// it, so the next press flips from what is true and not from what the deck remembers.
+func (r *Registry) SetOn(key string, on bool) {
+	r.mu.Lock()
+	r.toggles[key] = on
+	r.mu.Unlock()
+}

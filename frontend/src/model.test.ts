@@ -161,3 +161,19 @@ describe("integrations", () => {
     expect(base().integrations).toBeUndefined();
   });
 });
+
+describe("live tiles", () => {
+  it("sets and removes a tile on a button", () => {
+    const b = m.setTile({ label: "CPU" }, { type: "cpu" });
+    expect(b).toEqual({ label: "CPU", tile: { type: "cpu" } });
+    expect(m.setTile(b, null)).toEqual({ label: "CPU" });
+  });
+  it("says what a tile still needs", () => {
+    expect(m.tileProblem({ type: "clock" })).toBeNull();
+    expect(m.tileProblem({ type: "ha_state", entity: "Sensor X" })).toMatch(/Entity/);
+    expect(m.tileProblem({ type: "ha_state", entity: "sensor.x" })).toBeNull();
+    expect(m.tileProblem({ type: "script" })).toMatch(/command/);
+    expect(m.tileProblem({ type: "state", command: "x" })).toBeNull();
+    expect(m.tileProblem({ type: "cpu", every: 0.5 })).toMatch(/1 to 3600/);
+  });
+});

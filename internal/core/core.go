@@ -20,6 +20,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
+	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
 )
 
 // Options configure a Core.
@@ -82,6 +83,12 @@ func New(o Options) (*Core, error) {
 		Runner:   c.Actions,
 		Renderer: render.New(filepath.Join(dir, store.IconsDir)),
 	}
+	env := tiles.OSEnv(c.Actions.HAState)
+	if o.DryRun {
+		// A dry run does nothing to the computer, and a script tile is a command it would run.
+		env.Output = func(context.Context, string, []string, bool) (string, error) { return "dry run", nil }
+	}
+	c.Server.Tiles = tiles.NewCache(env)
 	c.root, c.stop = context.WithCancel(context.Background())
 	err = st.Watch(c.root, func(_ *deck.Config, err error) {
 		if err != nil {
