@@ -1,4 +1,6 @@
 import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { Icon } from "./Icon";
+import { Palette, PaletteGhost } from "./Palette";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionForm, KeysInput } from "./ActionForm";
@@ -109,46 +111,59 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <select value={profile} onChange={(e) => (setProfile(e.target.value), setPage(m.HOME), setSel(null))}>
-          {Object.keys(cfg.profiles).map((p) => (
-            <option key={p}>{p}</option>
-          ))}
-        </select>
-        <button
-          onClick={() => {
-            const n = window.prompt(`New profile (a copy of "${profile}")`)?.trim();
-            if (n === undefined || n === null) return;
-            const why = m.profileNameProblem(cfg, n);
-            if (why) return setMsg({ kind: "err", text: why });
-            edit(m.addProfile(cfg, n, profile));
-            setProfile(n);
-            setPage(m.HOME);
-          }}
-        >
-          New profile
-        </button>
-        <button
-          onClick={() => {
-            const why = m.profileDeleteBlocker(cfg, profile);
-            if (why) return setMsg({ kind: "err", text: why });
-            if (!window.confirm(`Delete profile "${profile}"?`)) return;
-            edit(m.deleteProfile(cfg, profile));
-            setProfile("default");
-            setPage(m.HOME);
-          }}
-        >
-          Delete profile
-        </button>
+        <div className="brand">
+          <span className="logo" />
+          Stream Deck
+        </div>
+        <div className="profile">
+          <select value={profile} title="Profile" onChange={(e) => (setProfile(e.target.value), setPage(m.HOME), setSel(null))}>
+            {Object.keys(cfg.profiles).map((p) => (
+              <option key={p}>{p}</option>
+            ))}
+          </select>
+          <button
+            className="ghost icon"
+            title="New profile (a copy of this one)"
+            onClick={() => {
+              const n = window.prompt(`New profile (a copy of "${profile}")`)?.trim();
+              if (n === undefined || n === null) return;
+              const why = m.profileNameProblem(cfg, n);
+              if (why) return setMsg({ kind: "err", text: why });
+              edit(m.addProfile(cfg, n, profile));
+              setProfile(n);
+              setPage(m.HOME);
+            }}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            className="ghost icon"
+            title="Delete this profile"
+            onClick={() => {
+              const why = m.profileDeleteBlocker(cfg, profile);
+              if (why) return setMsg({ kind: "err", text: why });
+              if (!window.confirm(`Delete profile "${profile}"?`)) return;
+              edit(m.deleteProfile(cfg, profile));
+              setProfile("default");
+              setPage(m.HOME);
+            }}
+          >
+            <Icon name="trash" />
+          </button>
+        </div>
         <span className="spacer" />
-        <button onClick={() => setShowDevices(true)}>Shows…</button>
-        <button disabled={!hist || !hist.past.length} onClick={() => setHist(m.undo(hist!))}>
-          Undo
+        <button className="ghost" onClick={() => setShowDevices(true)}>
+          <Icon name="shows" /> Shows
         </button>
-        <button disabled={!hist || !hist.future.length} onClick={() => setHist(m.redo(hist!))}>
-          Redo
+        <span className="sep" />
+        <button className="ghost icon" title="Undo (⌘Z)" disabled={!hist || !hist.past.length} onClick={() => setHist(m.undo(hist!))}>
+          <Icon name="undo" />
+        </button>
+        <button className="ghost icon" title="Redo (⇧⌘Z)" disabled={!hist || !hist.future.length} onClick={() => setHist(m.redo(hist!))}>
+          <Icon name="redo" />
         </button>
         <button className="primary" disabled={!dirty} onClick={save}>
-          {dirty ? "Save" : "Saved"}
+          {dirty ? "Save changes" : "Saved"}
         </button>
       </header>
       {showDevices && <DevicesPanel cfg={cfg} edit={edit} say={setMsg} onClose={() => setShowDevices(false)} />}
@@ -168,7 +183,7 @@ export function App() {
             <ProfilePanel cfg={cfg} profile={profile} edit={edit} say={setMsg} />
           </aside>
         </main>
-        <DragOverlay>{dragId?.startsWith("palette:") ? <div className="chip">{schemas[dragId.slice(8)]?.label}</div> : null}</DragOverlay>
+        <DragOverlay>{dragId?.startsWith("palette:") ? <PaletteGhost label={schemas[dragId.slice(8)]?.label ?? ""} /> : null}</DragOverlay>
       </DndContext>
     </div>
   );
@@ -188,8 +203,52 @@ function Pages(p: {
   const refuse = (text: string | null) => (text ? (p.say({ kind: "err", text }), true) : false);
   return (
     <nav>
-      <h3>Pages</h3>
-      <ul>
+      <div className="head">
+        <h3>Pages</h3>
+        <span className="tools">
+          <button
+            className="ghost icon"
+            title="Add a page"
+            onClick={() => {
+              const n = ask("New page name");
+              if (n !== null && !refuse(m.pageNameProblem(prof, n))) {
+                p.edit(m.addPage(p.cfg, p.profile, n));
+                p.setPage(n);
+              }
+            }}
+          >
+            <Icon name="plus" />
+          </button>
+          <button
+            className="ghost icon"
+            title="Rename this page"
+            disabled={p.page === m.HOME}
+            onClick={() => {
+              const n = ask("Rename page to", p.page);
+              if (n !== null && n !== p.page && !refuse(m.pageNameProblem(prof, n))) {
+                p.edit(m.renamePage(p.cfg, p.profile, p.page, n));
+                p.setPage(n);
+              }
+            }}
+          >
+            <Icon name="pencil" />
+          </button>
+          <button
+            className="ghost icon"
+            title="Delete this page"
+            disabled={p.page === m.HOME}
+            onClick={() => {
+              if (!refuse(m.deleteBlocker(prof, p.page)) && window.confirm(`Delete page "${p.page}"?`)) {
+                p.edit(m.deletePage(p.cfg, p.profile, p.page));
+                p.setPage(m.HOME);
+              }
+            }}
+          >
+            <Icon name="trash" />
+          </button>
+        </span>
+      </div>
+      <ul className="pages">
         {Object.keys(prof.pages)
           .sort((a, b) => (a === m.HOME ? -1 : b === m.HOME ? 1 : a.localeCompare(b)))
           .map((n) => (
@@ -198,58 +257,10 @@ function Pages(p: {
             </li>
           ))}
       </ul>
-      <div className="row">
-        <button
-          onClick={() => {
-            const n = ask("New page name");
-            if (n !== null && !refuse(m.pageNameProblem(prof, n))) {
-              p.edit(m.addPage(p.cfg, p.profile, n));
-              p.setPage(n);
-            }
-          }}
-        >
-          Add
-        </button>
-        <button
-          disabled={p.page === m.HOME}
-          onClick={() => {
-            const n = ask("Rename page to", p.page);
-            if (n !== null && n !== p.page && !refuse(m.pageNameProblem(prof, n))) {
-              p.edit(m.renamePage(p.cfg, p.profile, p.page, n));
-              p.setPage(n);
-            }
-          }}
-        >
-          Rename
-        </button>
-        <button
-          onClick={() => {
-            if (!refuse(m.deleteBlocker(prof, p.page)) && window.confirm(`Delete page "${p.page}"?`)) {
-              p.edit(m.deletePage(p.cfg, p.profile, p.page));
-              p.setPage(m.HOME);
-            }
-          }}
-        >
-          Delete
-        </button>
-      </div>
       <h3>Add a button</h3>
-      <p className="hint">Drag onto a cell.</p>
-      <div className="palette">
-        {Object.values(p.schemas).map((x) => (
-          <PaletteItem key={x.type} type={x.type} label={x.label} />
-        ))}
-      </div>
+      <p className="hint">Drag one onto a cell of the screen.</p>
+      <Palette schemas={p.schemas} />
     </nav>
-  );
-}
-
-function PaletteItem({ type, label }: { type: string; label: string }) {
-  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: `palette:${type}` });
-  return (
-    <div ref={setNodeRef} {...listeners} {...attributes} className={`chip ${isDragging ? "dragging" : ""}`}>
-      {label}
-    </div>
   );
 }
 
@@ -314,7 +325,7 @@ function Canvas(p: {
   return (
     <>
       <section className="canvas-wrap" ref={wrap}>
-        <div style={{ width: SCREEN.w * scale, height: SCREEN.h * scale }}>
+        <div className="bezel" style={{ width: SCREEN.w * scale, height: SCREEN.h * scale }}>
         <div className="canvas" style={{ width: SCREEN.w, height: SCREEN.h, background: prof.theme.bg, transform: `scale(${scale})`, transformOrigin: "0 0" }} onClick={() => p.setSel(null)}>
           {img && <img src={img} width={SCREEN.w} height={SCREEN.h} draggable={false} alt="" />}
           {rects.map((r, i) => {
@@ -324,7 +335,7 @@ function Canvas(p: {
         </div>
         </div>
         {err && <p className="msg err">{err}</p>}
-        <p className="hint">Click a cell to edit it. Drag to move or swap. ⌘C / ⌘V copy and paste, ⌫ clears, ⌘Z undoes.</p>
+        <p className="hint caption">Click a cell to edit it · drag to move or swap · ⌘C / ⌘V copy and paste · ⌫ clears · ⌘Z undoes</p>
       </section>
     </>
   );
@@ -338,10 +349,12 @@ function Cell(p: { id: string; rect: { x: number; y: number; w: number; h: numbe
       ref={(n) => (drop.setNodeRef(n), drag.setNodeRef(n))}
       {...drag.listeners}
       {...drag.attributes}
-      className={`cell ${p.on ? "on" : ""} ${drop.isOver ? "over" : ""} ${drag.isDragging ? "lifted" : ""}`}
+      className={`cell ${p.full ? "" : "free"} ${p.on ? "on" : ""} ${drop.isOver ? "over" : ""} ${drag.isDragging ? "lifted" : ""}`}
       style={{ left: p.rect.x, top: p.rect.y, width: p.rect.w, height: p.rect.h }}
       onClick={(e) => (e.stopPropagation(), p.pick())}
-    />
+    >
+      {!p.full && <span className="plus">+</span>}
+    </div>
   );
 }
 
@@ -359,7 +372,7 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
   useEffect(() => (setJson(actionJSON), setBad(false)), [actionJSON, p.sel]);
   useEffect(() => (setTest(null), setMoved(null)), [p.sel, p.page]);
 
-  if (!p.sel) return <section className="panel"><h3>Button</h3><p className="hint">Pick a cell.</p></section>;
+  if (!p.sel) return <section className="panel empty"><h3>Button</h3><p className="hint">Click a cell on the screen to edit its button, or drag a new one onto it.</p></section>;
   const sel = p.sel;
   const put = (next: m.Button | null) => p.edit(m.setButton(p.cfg, p.profile, p.page, sel, next));
   const set = (patch: Partial<m.Button>) => put({ ...(b ?? {}), ...patch });
@@ -390,7 +403,14 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
 
   return (
     <section className="panel">
-      <h3>Button {sel}</h3>
+      <div className="head">
+        <h3>
+          Button <span className="cellid">{sel}</span>
+        </h3>
+        <button className="ghost icon danger" title="Clear this button" disabled={!b} onClick={() => put(null)}>
+          <Icon name="trash" />
+        </button>
+      </div>
       <label>
         Label
         <input value={b?.label ?? ""} onChange={(e) => set({ label: e.target.value || undefined })} />
@@ -464,13 +484,10 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
 
       <div className="row">
         {schema?.runnable && (
-          <button disabled={problems.length > 0 || test?.kind === "wait"} onClick={run} title="Runs it now on this computer">
-            Test
+          <button className="primary" disabled={problems.length > 0 || test?.kind === "wait"} onClick={run} title="Runs it now on this computer">
+            Test it now
           </button>
         )}
-        <button onClick={() => put(null)} disabled={!b}>
-          Clear button
-        </button>
       </div>
       {test && <p className={`testout ${test.kind === "wait" ? "" : test.kind}`}>{test.text}</p>}
 
@@ -529,7 +546,7 @@ function ProfilePanel(p: {
   );
   return (
     <section className="panel">
-      <h3>Profile “{p.profile}”</h3>
+      <h3>Profile “{p.profile}” — grid and colours</h3>
       <div className="two">
         {grid("cols", 1, 8)}
         {grid("rows", 1, 6)}
