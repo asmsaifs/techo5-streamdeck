@@ -8,6 +8,7 @@ let cfg: unknown = structuredClone(example);
 const schemas = [
   { type: "page", label: "Folder", group: "Navigation", help: "Opens another page of this deck.", runnable: false, fields: [{ name: "page", label: "Page", kind: "page", required: true }] },
   { type: "back", label: "Back", group: "Navigation", runnable: false, fields: null },
+  { type: "stream.web", label: "Show website", group: "Stream", runnable: false, help: "Shows a website on the Show and passes its touches to it.", fields: [{ name: "url", label: "URL", kind: "string", required: true, help: "With a scheme, like https://example.com" }, { name: "allow", label: "Other sites it may use", kind: "list" }, { name: "profile", label: "Browser profile", kind: "string" }] },
   { type: "open.url", label: "Open site", group: "Open", runnable: true, fields: [{ name: "url", label: "URL", kind: "string", required: true, help: "With a scheme, like https://example.com" }] },
   { type: "keys", label: "Hotkey", group: "Keyboard", runnable: true, fields: [{ name: "keys", label: "Keys", kind: "keys", required: true, help: "Press the combination to record it" }] },
   { type: "run", label: "Run command", group: "Scripts", runnable: true, help: "Runs a program with arguments.", fields: [
@@ -26,6 +27,7 @@ const icon = (d: string) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 const handlers: Record<string, (...a: any[]) => unknown> = {
   Settings: () => ({ Listen: "0.0.0.0:9555", Key: "mock-key-0123456789abcdef", Running: true, Address: "192.168.1.20:9555" }),
+  Browsers: () => [{ Profile: "youtube-com", Tabs: 2, Parked: 1, Memory: 412000000 }],
   Devices: () => [{ Name: "Kitchen Show", Addr: "192.168.1.31:51234", W: 960, H: 480, Profile: "default", Source: "deck", Since: "", Bytes: Date.now() % 100000 * 40, Frames: Math.floor(Date.now() / 100) % 100000 }],
   SetListen: () => undefined,
   RegenerateKey: () => "mock-key-new",

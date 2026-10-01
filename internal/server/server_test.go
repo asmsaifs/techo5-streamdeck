@@ -5,16 +5,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/draw"
 	"image/jpeg"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
+	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
 )
 
@@ -338,5 +342,187 @@ func TestAutoSwitch(t *testing.T) {
 	srv.SetForeground("Notes")
 	if d := differs(sh.settle(), home); d > 1 || profile() != "default" {
 		t.Errorf("not switched back: profile %s, differs %.2f", profile(), d)
+	}
+}
+
+// streamConfig is a deck whose one button shows the website at url.
+func streamConfig(t *testing.T, url string) *deck.Config {
+	t.Helper()
+	b, _ := json.Marshal(map[string]any{"type": "stream.web", "url": url})
+	c, err := deck.Decode([]byte(`{"version":1,"server":{"key":"` + key + `"},"profiles":{"default":{"pages":{
+		"home":{"buttons":{"0,0":{"label":"Site","action":` + string(b) + `}}}}}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Fill()
+	return c
+}
+
+func colourAt(img *image.RGBA, x, y int) [3]int {
+	c := img.RGBAAt(x, y)
+	return [3]int{int(c.R), int(c.G), int(c.B)}
+}
+
+func closeTo(got, want [3]int) bool {
+	for i := range got {
+		if d := got[i] - want[i]; d > 40 || d < -40 {
+			return false
+		}
+	}
+	return true
+}
+
+// A button that shows a website takes the Show to it, passes its touches on, and the deck's
+// frames stay off the Show meanwhile. A real browser is needed; the test is skipped without one.
+func TestWebsiteOnTheShow(t *testing.T) {
+	if _, err := web.FindChrome(""); err != nil {
+		t.Skip(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><body style="margin:0;background:#f00">
+<div style="width:300px;height:300px;background:#0f0" onclick="document.body.style.background='#00f'"></div>`)
+	}))
+	defer site.Close()
+
+	cfg := streamConfig(t, site.URL)
+	srv, addr := startServer(t, cfg, &runner{})
+	srv.Web = web.NewManager(t.TempDir())
+	t.Cleanup(srv.Web.Close)
+	sh := connect(t, addr, key, "Kitchen")
+	sh.settle() // the deck
+
+	p := cfg.Profiles["default"]
+	r := render.NewLayout(p.Grid, image.Pt(960, 480)).Rect(deck.Cell{})
+	sh.tap((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+
+	// Opening takes as long as the browser does to start.
+	deadline := time.Now().Add(30 * time.Second)
+	var scr *image.RGBA
+	for {
+		scr = sh.settle()
+		if closeTo(colourAt(scr, 800, 400), [3]int{255, 0, 0}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the website never reached the Show: %v at the corner", colourAt(scr, 800, 400))
+		}
+	}
+	if !closeTo(colourAt(scr, 100, 100), [3]int{0, 255, 0}) {
+		t.Errorf("the page's square is %v, want green", colourAt(scr, 100, 100))
+	}
+	if got := srv.Sessions(); len(got) != 1 || got[0].Source != "web" {
+		t.Errorf("sessions %+v, want one showing the web", got)
+	}
+
+	// A tap on the page reaches the page, not the deck's button underneath.
+	sh.tap(100, 100)
+	for {
+		scr = sh.settle()
+		if closeTo(colourAt(scr, 800, 400), [3]int{0, 0, 255}) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the tap did not reach the page: %v at the corner", colourAt(scr, 800, 400))
+		}
+	}
+}
+
+// A page that cannot be opened leaves the deck up and the Show connected.
+func TestWebsiteThatWillNotOpenLeavesTheDeck(t *testing.T) {
+	if _, err := web.FindChrome(""); err != nil {
+		t.Skip(err)
+	}
+	gone := httptest.NewServer(http.NotFoundHandler())
+	url := gone.URL
+	gone.Close()
+
+	cfg := streamConfig(t, url)
+	srv, addr := startServer(t, cfg, &runner{})
+	srv.Web = web.NewManager(t.TempDir())
+	t.Cleanup(srv.Web.Close)
+	sh := connect(t, addr, key, "Kitchen")
+	before := sh.settle()
+
+	p := cfg.Profiles["default"]
+	r := render.NewLayout(p.Grid, image.Pt(960, 480)).Rect(deck.Cell{})
+	sh.tap((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+	time.Sleep(6 * time.Second)
+	if d := differs(sh.settle(), before); d > 1.5 {
+		t.Errorf("the deck was disturbed by a page that did not open: %.2f", d)
+	}
+	if got := srv.Sessions(); len(got) != 1 || got[0].Source != "deck" {
+		t.Errorf("sessions %+v, want one still on the deck", got)
+	}
+}
+
+// Without a browser manager a website button fails and the deck stays.
+func TestWebsiteButtonWithoutABrowser(t *testing.T) {
+	cfg := streamConfig(t, "https://example.com")
+	srv, addr := startServer(t, cfg, &runner{})
+	sh := connect(t, addr, key, "Kitchen")
+	before := sh.settle()
+	p := cfg.Profiles["default"]
+	r := render.NewLayout(p.Grid, image.Pt(960, 480)).Rect(deck.Cell{})
+	sh.tap((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+	time.Sleep(time.Second)
+	if d := differs(sh.settle(), before); d > 1.5 {
+		t.Errorf("the deck was disturbed: %.2f", d)
+	}
+	if got := srv.Sessions(); got[0].Source != "deck" {
+		t.Errorf("source %q", got[0].Source)
+	}
+}
+
+// The chip shows when a page opens, goes after a few seconds, comes back after a tap near the top
+// edge, and a tap on it returns to the deck with the connection kept.
+func TestChipReturnsToTheDeck(t *testing.T) {
+	if _, err := web.FindChrome(""); err != nil {
+		t.Skip(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><body style="margin:0;background:#0f0">`)
+	}))
+	defer site.Close()
+	cfg := streamConfig(t, site.URL)
+	srv, addr := startServer(t, cfg, &runner{})
+	srv.Web = web.NewManager(t.TempDir())
+	t.Cleanup(srv.Web.Close)
+	sh := connect(t, addr, key, "Kitchen")
+	deckScreen := sh.settle()
+
+	p := cfg.Profiles["default"]
+	r := render.NewLayout(p.Grid, image.Pt(960, 480)).Rect(deck.Cell{})
+	sh.tap((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+
+	green := [3]int{0, 255, 0}
+	waitFor := func(what string, ok func(*image.RGBA) bool) {
+		t.Helper()
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			if ok(sh.settle()) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("never saw %s", what)
+			}
+		}
+	}
+	chipUp := func(img *image.RGBA) bool {
+		return !closeTo(colourAt(img, 112, 30), green) && closeTo(colourAt(img, 600, 300), green)
+	}
+	chipDown := func(img *image.RGBA) bool {
+		return closeTo(colourAt(img, 112, 30), green) && closeTo(colourAt(img, 600, 300), green)
+	}
+
+	waitFor("the chip when the page opens", chipUp)
+	waitFor("the chip going away", chipDown)
+
+	sh.tap(600, 10) // near the top edge
+	waitFor("the chip coming back", chipUp)
+
+	sh.tap(30, 30) // on the chip
+	waitFor("the deck again", func(img *image.RGBA) bool { return differs(img, deckScreen) < 1.5 })
+	if got := srv.Sessions(); len(got) != 1 || got[0].Source != "deck" {
+		t.Errorf("sessions %+v, want one back on the deck", got)
 	}
 }

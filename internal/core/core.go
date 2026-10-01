@@ -21,6 +21,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
+	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
 )
@@ -88,6 +89,7 @@ func New(o Options) (*Core, error) {
 		Config:   st.Config,
 		Runner:   c.Actions,
 		Renderer: render.New(filepath.Join(dir, store.IconsDir)),
+		Web:      web.NewManager(filepath.Join(dir, "chrome-profiles")),
 	}
 	env := tiles.OSEnv(c.Actions.HAState)
 	if o.DryRun {
@@ -171,6 +173,8 @@ func (c *Core) Press(ctx context.Context, profile, page, button string) error {
 	switch b.Action.Type {
 	case "page", "back":
 		return fmt.Errorf("%s is a %s button, which moves around on a Show's screen", cell, b.Action.Type)
+	case "stream.web":
+		return fmt.Errorf("%s is a %s button, which puts a website on a Show's screen", cell, b.Action.Type)
 	}
 	ctx, cancel := context.WithTimeout(actions.WithButton(ctx, actions.ButtonKey(profile, page, cell)), 10*time.Minute)
 	defer cancel()
@@ -288,6 +292,7 @@ func (c *Core) Addr() net.Addr {
 func (c *Core) Close() {
 	c.Pause()
 	c.stop()
+	c.Server.Web.Close()
 }
 
 // LANIP is this computer's address on the LAN, as a guess for the instructions: the source

@@ -26,6 +26,16 @@ type Options struct {
 	Quality int           // JPEG quality; 85
 	Soft    float64       // the fraction of the screen that must change in one frame to go half size; 0.35
 	Settle  time.Duration // how long after the last half-size frame the full-size ones follow; 250 ms
+
+	// Video mode is for pictures that are moving all the time: every change goes at half size, at
+	// a lower quality, and at most VideoFPS pictures a second (MinInterval says how long to wait).
+	// It is switched on with SetVideo, or by the encoder itself once the screen has been moving for
+	// AutoAfter and off again after AutoHold of stillness.
+	VideoQuality int           // 70
+	VideoFPS     int           // 25
+	AutoAfter    time.Duration // 2 s
+	AutoHold     time.Duration // 3 s
+	Now          func() time.Time
 }
 
 func (o Options) filled() Options {
@@ -37,6 +47,21 @@ func (o Options) filled() Options {
 	}
 	if o.Settle == 0 {
 		o.Settle = 250 * time.Millisecond
+	}
+	if o.VideoQuality == 0 {
+		o.VideoQuality = 70
+	}
+	if o.VideoFPS == 0 {
+		o.VideoFPS = 25
+	}
+	if o.AutoAfter == 0 {
+		o.AutoAfter = 2 * time.Second
+	}
+	if o.AutoHold == 0 {
+		o.AutoHold = 3 * time.Second
+	}
+	if o.Now == nil {
+		o.Now = time.Now
 	}
 	return o
 }
@@ -60,6 +85,55 @@ type Encoder struct {
 	sharpen *time.Timer
 	gen     int
 	err     error // the first error the settle timer met, for the next Send to report
+
+	// Video mode: forced by the caller, or found by the encoder (auto). movingSince is when the
+	// screen began moving without a pause, lastMoving the last frame that moved it.
+	forced, auto            bool
+	movingSince, lastMoving time.Time
+}
+
+// SetVideo forces video mode on or off. Off leaves the automatic switching in charge.
+func (e *Encoder) SetVideo(on bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.forced = on
+}
+
+// Video is whether pictures go out in video mode now.
+func (e *Encoder) Video() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.forced || e.auto
+}
+
+// MinInterval is how long a sender should leave between pictures: nothing normally, and in video
+// mode a frame's share of VideoFPS, since the Show cannot decode more than that anyway.
+func (e *Encoder) MinInterval() time.Duration {
+	if e.Video() {
+		return time.Second / time.Duration(e.opt.VideoFPS)
+	}
+	return 0
+}
+
+// track follows how long the screen has been moving, and switches video mode on and off. The
+// caller holds mu.
+func (e *Encoder) track(moving bool) {
+	now := e.opt.Now()
+	if moving {
+		// A gap longer than a few frames means it stopped and started again.
+		if e.movingSince.IsZero() || now.Sub(e.lastMoving) > 500*time.Millisecond {
+			e.movingSince = now
+		}
+		e.lastMoving = now
+		if now.Sub(e.movingSince) >= e.opt.AutoAfter {
+			e.auto = true
+		}
+		return
+	}
+	if e.auto && now.Sub(e.lastMoving) >= e.opt.AutoHold {
+		e.auto = false
+		e.movingSince = time.Time{}
+	}
 }
 
 func NewEncoder(out Sink, opt Options) *Encoder { return &Encoder{out: out, opt: opt.filled()} }
@@ -88,6 +162,7 @@ func (e *Encoder) Send(img image.Image) error {
 	}
 	rects := changes(prev, cur)
 	if len(rects) == 0 {
+		e.track(false)
 		return nil
 	}
 
@@ -96,6 +171,9 @@ func (e *Encoder) Send(img image.Image) error {
 		area += r.Dx() * r.Dy()
 	}
 	moving := float64(area) > e.opt.Soft*float64(cur.Rect.Dx()*cur.Rect.Dy())
+	e.track(moving)
+	// In video mode every change is picture-sized motion, however little of the screen it is.
+	moving = moving || e.forced || e.auto
 	if !moving {
 		for _, r := range rects {
 			if err := e.picture(r); err != nil {
@@ -175,9 +253,17 @@ func (e *Encoder) half(r image.Rectangle) error {
 	return e.out.Half(r.Min, jpg)
 }
 
+// quality is the JPEG quality now. The caller holds mu.
+func (e *Encoder) quality() int {
+	if e.forced || e.auto {
+		return e.opt.VideoQuality
+	}
+	return e.opt.Quality
+}
+
 func (e *Encoder) encode(img image.Image) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: e.opt.Quality}); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: e.quality()}); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

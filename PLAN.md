@@ -572,10 +572,10 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 3.3 HTTP / Home Assistant / OBS — http, ha.service, obs; addresses in config, secrets in the OS keychain; tested against fake servers and a real local webhook/keychain, not yet against a real Home Assistant or OBS
 - [x] 3.4 Live tiles — clock, cpu, ram, ha_state (polled, not subscribed), script, and a state tile that makes toggles follow the real state; shared cache, only the shown page is read
 - [x] 3.5 Profile auto-switch — rules in config, front app by lsappinfo / GetForegroundWindow / xprop; macOS checked for real, Windows and Linux compile only. Phase 3 done
-- [ ] 4.1 WebSource (dashcast port)
-- [ ] 4.2 Live view chip + back gesture
-- [ ] 4.3 Video mode
-- [ ] 4.4 Warm tabs → **v0.3.0**
+- [x] 4.1 WebSource (dashcast port) — `stream.web` action, per-tile domain allowlist, persistent profile per site, window per tile; tested with a real Edge (docs/spikes.md). Touch replay is mouse click + wheel, not touch events. Open: Chrome download, "login window", Windows/Linux check; the way back to the deck is the left-edge swipe until 4.2
+- [x] 4.2 Live view chip + back gesture — "Deck" chip (top left, translucent) for 3 s on open and after a tap in the top 40 px; a tap on it returns to the deck, connection kept; a page that stops shows the problem for 4 s then the deck. No spinner: the pressed deck button stands in until the first picture
+- [x] 4.3 Video mode — `video` flag on `stream.web` and automatic switching in the screen encoder (half size, q70, 25 fps cap); not measured on the real Show
+- [x] 4.4 Warm tabs → **v0.3.0** (not tagged yet, same wait as v0.1.0) — last 2 pages parked 10 min (frozen, stream stopped), memory in the Shows panel. Open: desktop "login window" (sign in by touch for now), Chrome download
 - [ ] 5.1 Protocol extension doc
 - [ ] 5.2 Device audio (techo5, OTA)
 - [ ] 5.3 Desktop audio pipeline

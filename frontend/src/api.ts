@@ -42,6 +42,13 @@ export interface Device {
   Bytes: number;
   Frames: number;
 }
+export interface Browser {
+  Profile: string;
+  Tabs: number;
+  Parked: number;
+  Memory: number;
+}
+export const browsers = () => call<Browser[]>("Browsers");
 export const settings = () => call<Settings>("Settings");
 export const devices = () => call<Device[]>("Devices");
 export const setListen = (addr: string) => call<void>("SetListen", addr);

@@ -317,3 +317,89 @@ func TestOverTheWire(t *testing.T) {
 		t.Errorf("%v %v", img, err)
 	}
 }
+
+// A fake clock for the automatic video mode.
+type clock struct{ t time.Time }
+
+func (c *clock) now() time.Time { return c.t }
+
+func TestForcedVideoSendsEverythingHalf(t *testing.T) {
+	e, s := newEnc()
+	defer e.Close()
+	e.SetVideo(true)
+	if e.MinInterval() != 40*time.Millisecond {
+		t.Errorf("MinInterval = %v, want 40ms at 25 fps", e.MinInterval())
+	}
+	e.Send(frame(960, 480, 40))
+	s.take()
+	b := frame(960, 480, 40)
+	small := image.Rect(100, 100, 120, 120) // far below the 35 % that makes motion on the deck
+	fill(b, small, red)
+	e.Send(b)
+	got := s.take()
+	if len(got) != 1 || !got[0].half {
+		t.Fatalf("a small change in video mode sent %+v, want one half-size picture", got)
+	}
+	e.SetVideo(false)
+	if e.Video() || e.MinInterval() != 0 {
+		t.Error("video mode stayed on")
+	}
+}
+
+func TestVideoModeIsFoundAndLeft(t *testing.T) {
+	ck := &clock{t: time.Unix(1000, 0)}
+	s := &fakeSink{}
+	e := NewEncoder(s, Options{Settle: settle, Now: ck.now})
+	defer e.Close()
+	e.Send(frame(960, 480, 40))
+	moving := func(i int) *image.RGBA {
+		b := frame(960, 480, 40)
+		fill(b, image.Rect(0, 0, 960, 288), color.RGBA{uint8(i), 0, 0, 255})
+		return b
+	}
+	// Moving on every frame for a second: not yet.
+	for i := 1; i <= 10; i++ {
+		ck.t = ck.t.Add(100 * time.Millisecond)
+		e.Send(moving(i))
+	}
+	if e.Video() {
+		t.Fatal("video mode after one second of motion")
+	}
+	for i := 11; i <= 25; i++ {
+		ck.t = ck.t.Add(100 * time.Millisecond)
+		e.Send(moving(i))
+	}
+	if !e.Video() {
+		t.Fatal("no video mode after two and a half seconds of motion")
+	}
+	// Still for less than the hold: stays on. Then off.
+	ck.t = ck.t.Add(2 * time.Second)
+	e.Send(moving(25))
+	if !e.Video() {
+		t.Fatal("video mode left after two seconds of stillness")
+	}
+	ck.t = ck.t.Add(2 * time.Second)
+	e.Send(moving(25))
+	if e.Video() {
+		t.Error("video mode stayed on after four seconds of stillness")
+	}
+}
+
+func TestPausesInMotionRestartTheCount(t *testing.T) {
+	ck := &clock{t: time.Unix(1000, 0)}
+	e := NewEncoder(&fakeSink{}, Options{Settle: settle, Now: ck.now})
+	defer e.Close()
+	e.Send(frame(960, 480, 40))
+	for burst := 0; burst < 3; burst++ {
+		for i := 0; i < 15; i++ { // 1.5 s of motion, then a pause
+			ck.t = ck.t.Add(100 * time.Millisecond)
+			b := frame(960, 480, 40)
+			fill(b, image.Rect(0, 0, 960, 288), color.RGBA{uint8(burst*20 + i + 1), 0, 0, 255})
+			e.Send(b)
+		}
+		ck.t = ck.t.Add(time.Second)
+	}
+	if e.Video() {
+		t.Error("separate bursts of motion added up to video mode")
+	}
+}

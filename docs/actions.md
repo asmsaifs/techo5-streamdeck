@@ -7,6 +7,7 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 |---|---|---|
 | `page` | `page` | Opens a sub-page. The deck adds a Back button to a page that has none. |
 | `back` | | Goes back one page. |
+| `stream.web` | `url`, `allow` (more sites it may use), `profile` | Shows a website on the Show: see [Website tiles](#website-tiles). Not run from a hotkey or `trigger`, and the Test button leaves it out: it is the Show's screen that changes. |
 | `open.url` | `url` | Needs a scheme (`https://`, `spotify:`...). macOS `open`, Windows `rundll32 url.dll`, Linux `xdg-open`. |
 | `open.app` | `app` | macOS `open -a`, Windows `start` (names with `& \| < > ^ %` are refused), Linux `gtk-launch`, else the program by name. |
 | `open.file` | `path` | `~` is the home folder. Opens with the OS's default. |
@@ -30,6 +31,39 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 A button flashes green when its action worked and red when it failed (the reason is in the log).
 The Show sends a tap only when the finger lifts, so the "pressed" look is a short flash after the
 tap, not held while touching.
+
+## Website tiles
+
+`stream.web` opens the page in a headless Chrome on this computer and streams it to the Show as
+pictures (only what changed, as on the deck); the Show's touches go back to it. It needs Chrome,
+Edge, Brave or Chromium installed (`TECHO5_CHROME` names one if none is found).
+
+- **Touch**: a tap is a click, a drag scrolls (the page follows the finger). Sliders cannot be
+  dragged, only tapped. The page is the size of the Show's screen, so it lays out as a desktop site.
+- **Leaving**: a "Deck" chip shows in the top left corner for 3 seconds when the page opens and
+  again after a tap within 40 px of the top edge (that tap reaches the page too). A tap on the chip
+  closes the page and returns to the deck. Swiping in from the left edge leaves the stream
+  altogether, as for any stream.
+- **Which sites**: the page may only be at the URL's own registered domain (`youtube.com` for
+  `www.youtube.com`), and at the domains listed in `allow`. A tap on a link anywhere else does
+  nothing; a script or redirect that goes elsewhere is stopped and the page put back. Sign-ins that
+  live on another domain need it in `allow` (Google sign-in: `google.com`).
+- **Sign-ins**: each `profile` is a separate browser profile in `chrome-profiles/` next to the
+  config, never your own browser's. Empty `profile` means one per site, shared by its buttons. To
+  sign in, open the same site on the Show and log in by touch (a "login window" on the desktop
+  comes with step 4.4).
+- **Video**: pictures are normally only what changed, sharp, and go half size while most of the
+  screen moves. With `video: true` every change goes at half size, JPEG quality 70 and at most 25
+  pictures a second (the Show decodes about 30 half-size frames a second). Without it, the same
+  mode switches on by itself after two seconds of the whole page moving and off after three
+  seconds of stillness. Paused video is sharpened as soon as it stops.
+- **Warm pages**: leaving a page parks its window (stream stopped, page frozen) instead of closing
+  it. Opening the same button again within 10 minutes gets it back at once without loading. Two
+  are kept; a third closes the oldest. A browser goes when its last window does. The Shows panel
+  lists the browsers, their windows and memory.
+- **No sound yet** (Phase 5): the browser is muted.
+- A page that cannot open leaves the deck as it was and flashes the button red; the reason is in
+  the log.
 
 ## Permissions
 

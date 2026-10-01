@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +75,11 @@ type Source struct {
 
 	// Tiles reads live tiles. Nil means buttons with a tile show no value. Set before Start.
 	Tiles Tiler
-	kick  chan struct{} // asks the tile loop to look at once, after a page change
+	// Stream opens what a stream.* button shows in place of the deck. It returns when that is up
+	// or it could not be: the button looks pressed until then. Nil means there is nowhere to
+	// stream to, and those buttons fail. Set before Start.
+	Stream func(a *model.Action) error
+	kick   chan struct{} // asks the tile loop to look at once, after a page change
 
 	mu    sync.Mutex
 	tvals map[string]*tileVal // the last reading of each tile, by "page/cell"
@@ -359,6 +364,14 @@ func (s *Source) runAction(cell model.Cell, a *model.Action, key string) {
 }
 
 func (s *Source) exec(a *model.Action, key string) error {
+	// Streaming is not something to do on the computer: it changes what the Show displays, which
+	// is the server's to do.
+	if strings.HasPrefix(a.Type, "stream.") {
+		if s.Stream == nil {
+			return fmt.Errorf("cannot stream %q: nowhere to show it", a.Type)
+		}
+		return s.Stream(a)
+	}
 	if s.run == nil {
 		return fmt.Errorf("no action runner: cannot run %q", a.Type)
 	}

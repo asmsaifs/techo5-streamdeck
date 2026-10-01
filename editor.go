@@ -18,6 +18,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
+	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 )
 
@@ -87,6 +88,10 @@ func (e *Editor) Preview(configJSON, profile, page string, w, h int) (string, er
 
 // Devices lists the Shows connected now.
 func (e *Editor) Devices() []server.Info { return e.core.Server.Sessions() }
+
+// Browsers lists the browsers website tiles run in: their windows, how many are parked, and the
+// memory they hold.
+func (e *Editor) Browsers() []web.BrowserInfo { return e.core.Server.Web.Stats() }
 
 // Schemas describes the actions the inspector can edit.
 func (e *Editor) Schemas() []actions.Schema { return actions.Schemas() }

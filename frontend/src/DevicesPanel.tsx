@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Device, Settings } from "./api";
-import { devices, errorText, regenerateKey, setListen, settings } from "./api";
+import type { Browser, Device, Settings } from "./api";
+import { browsers, devices, errorText, regenerateKey, setListen, settings } from "./api";
 import { frontApp, secretStatus, setSecret } from "./api";
 import type { SecretStatus } from "./api";
 import * as m from "./model";
@@ -12,6 +12,7 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
   const [live, setLive] = useState<Device[]>([]);
   const [rates, setRates] = useState<Record<string, { kbps: number; fps: number }>>({});
   const prev = useRef<Record<string, { t: number; bytes: number; frames: number }>>({});
+  const [web, setWeb] = useState<Browser[]>([]);
   const [set, setSet] = useState<Settings | null>(null);
   const [listen, setListenText] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -26,6 +27,10 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
   // The list is read every couple of seconds; the rates come from the change between two reads.
   useEffect(() => {
     let stop = false;
+    const tickWeb = () =>
+      browsers()
+        .then((b) => !stop && setWeb(b ?? []))
+        .catch(() => {});
     const tick = () =>
       devices()
         .then((list) => {
@@ -41,8 +46,9 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
           setRates(r);
         })
         .catch(() => {});
-    tick();
-    const id = setInterval(tick, 2000);
+    const both = () => (tick(), tickWeb());
+    both();
+    const id = setInterval(both, 2000);
     return () => ((stop = true), clearInterval(id));
   }, []);
 
@@ -104,6 +110,14 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
               })}
             </tbody>
           </table>
+        )}
+        {web.length > 0 && (
+          <p className="hint">
+            Browsers for websites:{" "}
+            {web
+              .map((b) => `${b.Profile}: ${b.Tabs} window${b.Tabs === 1 ? "" : "s"}${b.Parked ? ` (${b.Parked} kept warm)` : ""}${b.Memory ? `, ${Math.round(b.Memory / 1048576)} MB` : ""}`)
+              .join(" · ")}
+          </p>
         )}
         <p className="hint">A Show that is not listed gets the “default” profile. Profile changes apply once you save.</p>
 

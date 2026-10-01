@@ -114,3 +114,31 @@ keeps going while the tab is hidden behind another tab.
   needs no licence file. Swapping is one line in `render.New`.
 - Cell and Grid pixels match to within 2 levels, not exactly: the rasterizer rounds antialiased
   edges differently at another offset. Invisible, and fine for repainting one cell.
+
+## Step 4.1: website tiles (headless Chrome)
+
+Found while porting dashcast's browser code to a desktop browser (Edge, Chrome should be the same;
+only Edge was at hand), all checked by tests that run a real browser:
+
+- **A new tab is a hidden page and streams nothing.** The screencast of a tab opened beside
+  another gave zero frames; `Page.bringToFront` fixes one tab, but tabs of one window then starve
+  each other. Each tile gets a window of its own (`Target.createTarget` with `newWindow`) and is
+  brought to the front.
+- **Frames are of the real window's page area, not the emulated viewport.** A window made 960×480
+  has a page area of 952×349 and the frames came that size. `fitWindow` reads the window's frame
+  size and sets the bounds so the page area is exactly the screen; frames of any other size are
+  dropped rather than drawn in the wrong place.
+- **A page that stands still sends no frame**, so a Show would wait for ever for its first
+  picture. One screenshot is sent right after the page loads (dashcast does the same for a tab it
+  picks up again).
+- **`Input.dispatchTouchEvent` never returns** in this Chrome (new headless), with or without
+  touch emulation; mouse events return at once. So a tap is press+release and a drag is the wheel.
+  `Input.dispatchMouseEvent` with `mouseMoved` alone waits 5 s for a frame, so no hover move is
+  sent before a click. dashcast's touch events worked in `headless-shell`, the old headless.
+- **A refused navigation shows Chrome's error page** over the page. The tap on a bad link is
+  stopped in the page (a capture-phase click handler); what gets past that (script, form,
+  redirect) is failed in `Fetch` and the tab goes back one page.
+- `chromedp.Cancel` panics if called twice, and the profile folder is written to until the process
+  has exited: browser shutdown waits for it and runs once.
+- Not done: Chrome download if none is installed (4.4), a Windows/Linux check (compiles only),
+  `Fetch` checks only the main frame, so a frame inside an allowed page can show anything.

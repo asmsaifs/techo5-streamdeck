@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"log/slog"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/screen"
 	"github.com/asmsaifs/techo5-streamdeck/internal/sources"
 	deckview "github.com/asmsaifs/techo5-streamdeck/internal/sources/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
 )
 
@@ -29,7 +31,9 @@ type Server struct {
 	Renderer *render.Renderer
 	// Tiles reads the values of live tiles, shared by every Show. May be nil: tiles show nothing.
 	Tiles deckview.Tiler
-	Log   *slog.Logger
+	// Web runs the browsers of website tiles. May be nil: those buttons then say they cannot.
+	Web *web.Manager
+	Log *slog.Logger
 
 	mu       sync.Mutex
 	sessions map[*session]struct{}
@@ -43,6 +47,18 @@ type session struct {
 	since  time.Time
 	deck   *deckview.Source
 	cancel context.CancelFunc
+	enc    *screen.Encoder
+
+	// cur is what the Show is looking at: the deck, or a tile that was opened from it. kind says
+	// which, for the devices panel. cmu guards both and opening, and is held only briefly.
+	cmu     sync.Mutex
+	cur     sources.Source
+	kind    string
+	opening bool
+	// sendMu makes "is this source current" and "send its frame" one step, so that a frame of the
+	// source that was left cannot arrive after the first of the one that took over.
+	sendMu sync.Mutex
+	chip   chipState // guarded by sendMu
 	// Counters for the devices panel, which turns two readings into a rate.
 	bytes  *atomic.Uint64
 	frames atomic.Uint64
@@ -66,7 +82,7 @@ type Info struct {
 	Addr    string
 	W, H    int
 	Profile string
-	Source  string // what it is showing now: "deck"
+	Source  string // what it is showing now: "deck", "web"
 	Since   time.Time
 	// Totals since it connected: bytes written to the Show, and pictures sent.
 	Bytes, Frames uint64
@@ -173,7 +189,7 @@ func (s *Server) Sessions() []Info {
 	var out []Info
 	for se := range s.sessions {
 		out = append(out, Info{Name: se.hello.Name, Addr: se.from.String(), W: se.hello.W, H: se.hello.H,
-			Profile: se.deck.Profile(), Source: "deck", Since: se.since,
+			Profile: se.deck.Profile(), Source: se.sourceKind(), Since: se.since,
 			Bytes: se.bytes.Load(), Frames: se.frames.Load()})
 	}
 	return out
@@ -216,36 +232,29 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	var src sources.Source
 	d := deckview.New(s.Config, name, s.Renderer, s.Runner, s.log().With("show", h.Name))
 	d.Tiles = s.Tiles
-	src = d
-	if err := src.Start(ctx, image.Pt(h.W, h.H)); err != nil {
+	if err := d.Start(ctx, image.Pt(h.W, h.H)); err != nil {
 		s.log().Warn("source", "err", err)
 		_ = out.Problem("The deck could not start: " + err.Error())
 		return
 	}
-	defer src.Close()
+	defer d.Close()
 
-	se := &session{hello: h, from: from, since: time.Now(), deck: d, cancel: cancel}
+	se := &session{hello: h, from: from, since: time.Now(), deck: d, cancel: cancel, cur: d, kind: "deck"}
 	se.bytes = &sent
+	se.enc = screen.NewEncoder(out, screen.Options{})
+	defer se.enc.Close()
+	d.Stream = func(a *deck.Action) error { return s.stream(ctx, se, out, a) }
 	s.add(se)
 	defer s.remove(se)
 	s.log().Info("connected", "from", from, "name", h.Name, "w", h.W, "h", h.H, "profile", name, "caps", h.Caps)
 	defer func() { s.log().Info("disconnected", "name", h.Name) }()
 
-	enc := screen.NewEncoder(out, screen.Options{})
-	defer enc.Close()
 	go func() {
 		defer cancel() // a picture that cannot be sent ends the session
 		defer raw.Close()
-		for img := range src.Frames() {
-			se.frames.Add(1)
-			if err := enc.Send(img); err != nil {
-				s.log().Warn("send", "name", h.Name, "err", err)
-				return
-			}
-		}
+		s.pump(se, d, d.Frames(), raw)
 	}()
 	go func() { <-ctx.Done(); raw.Close() }() // unblocks the touch read below
 
@@ -254,8 +263,175 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 		if err != nil {
 			return
 		}
-		src.Touch(t)
+		s.touch(se, t)
 	}
+}
+
+// current is the source the Show is looking at.
+func (se *session) current() sources.Source {
+	se.cmu.Lock()
+	defer se.cmu.Unlock()
+	return se.cur
+}
+
+func (se *session) sourceKind() string {
+	se.cmu.Lock()
+	defer se.cmu.Unlock()
+	return se.kind
+}
+
+// pump sends the frames of src to the Show for as long as src is the one it is looking at. The
+// frames of a source that is not are dropped: the deck's, while a website is shown, and it draws
+// itself again when it comes back. It returns when src stops, or when a picture cannot be sent,
+// which closes the connection.
+func (s *Server) pump(se *session, src sources.Source, frames <-chan *image.RGBA, raw net.Conn) {
+	for img := range frames {
+		se.sendMu.Lock()
+		if se.current() != src {
+			se.sendMu.Unlock()
+			continue
+		}
+		se.frames.Add(1)
+		if src != sources.Source(se.deck) {
+			img = s.framed(se, img)
+		}
+		started := time.Now()
+		err := se.enc.Send(img)
+		wait := se.enc.MinInterval() - time.Since(started)
+		se.sendMu.Unlock()
+		// The next frame is the newest one: a source keeps only the latest, so waiting drops the
+		// ones in between, which is the frame rate cap.
+		if wait > 0 && err == nil {
+			time.Sleep(wait)
+		}
+		if err != nil {
+			s.log().Warn("send", "name", se.hello.Name, "err", err)
+			se.cancel()
+			if raw != nil {
+				raw.Close()
+			}
+			return
+		}
+	}
+}
+
+// openTimeout is how long a page may take to show its first picture. Chrome starting cold and a
+// slow site can take a while; a Show waiting longer than this is told it failed.
+const openTimeout = 45 * time.Second
+
+// stream is a button that shows something other than the deck: it opens it and, once it has
+// something to show, the Show is switched to it. It returns when that has happened, or why it
+// could not; the deck's button shows the press meanwhile.
+func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *deck.Action) error {
+	if a.Type != "stream.web" {
+		return fmt.Errorf("%s is not available yet", a.Type)
+	}
+	var p struct {
+		URL     string   `json:"url"`
+		Allow   []string `json:"allow"`
+		Profile string   `json:"profile"`
+		Video   bool     `json:"video"`
+	}
+	if err := a.Params(&p); err != nil {
+		return fmt.Errorf("bad parameters: %w", err)
+	}
+	if s.Web == nil {
+		return errors.New("websites are not available in this build")
+	}
+	se.cmu.Lock()
+	if se.opening || se.cur != sources.Source(se.deck) {
+		se.cmu.Unlock()
+		return errors.New("something is already being shown")
+	}
+	se.opening = true
+	se.cmu.Unlock()
+	defer func() { se.cmu.Lock(); se.opening = false; se.cmu.Unlock() }()
+
+	src, err := s.Web.New(web.Spec{URL: p.URL, Allow: p.Allow, Profile: p.Profile})
+	if err != nil {
+		return err
+	}
+	// The source lives until the Show goes back to the deck or the session ends.
+	sctx, cancel := context.WithCancel(ctx)
+	if err := src.Start(sctx, image.Pt(se.hello.W, se.hello.H)); err != nil {
+		cancel()
+		return err
+	}
+	var first *image.RGBA
+	select {
+	case img, ok := <-src.Frames():
+		if !ok {
+			cancel()
+			return src.Err()
+		}
+		first = img
+	case <-time.After(openTimeout):
+		cancel()
+		return errors.New("the page took too long to open")
+	case <-ctx.Done():
+		cancel()
+		return ctx.Err()
+	}
+
+	// The Show switches to the page: the first picture is sent whole.
+	se.sendMu.Lock()
+	se.cmu.Lock()
+	se.cur, se.kind = src, "web"
+	se.cmu.Unlock()
+	se.enc.Invalidate()
+	se.enc.SetVideo(p.Video)
+	s.raiseChip(se)
+	err = se.enc.Send(s.framed(se, first))
+	se.sendMu.Unlock()
+	if err != nil {
+		cancel()
+		return err
+	}
+	s.log().Info("showing a website", "name", se.hello.Name, "profile", src.Profile())
+
+	go func() {
+		defer cancel()
+		s.pump(se, src, src.Frames(), nil)
+		// The page stopped by itself (the browser died, the tab closed), or the session is over.
+		if ctx.Err() != nil || se.current() != src {
+			return
+		}
+		text := "The page stopped."
+		if err := src.Err(); err != nil {
+			text = "The page stopped: " + err.Error()
+		}
+		s.log().Warn("website ended", "name", se.hello.Name, "err", src.Err())
+		_ = out.Problem(text)
+		select {
+		case <-time.After(4 * time.Second): // long enough to read
+		case <-ctx.Done():
+			return
+		}
+		s.showDeck(se, src)
+	}()
+	return nil
+}
+
+// showDeck takes the Show back from src to the deck, if src is still what it is looking at.
+func (s *Server) showDeck(se *session, src sources.Source) {
+	se.sendMu.Lock()
+	se.cmu.Lock()
+	if se.cur != src {
+		se.cmu.Unlock()
+		se.sendMu.Unlock()
+		return
+	}
+	se.cur, se.kind = se.deck, "deck"
+	se.cmu.Unlock()
+	if se.chip.timer != nil {
+		se.chip.timer.Stop()
+	}
+	se.chip = chipState{}
+	se.enc.SetVideo(false)
+	se.enc.Invalidate()
+	se.sendMu.Unlock()
+	_ = src.Close()
+	se.deck.Refresh() // its frame goes out through the deck's pump
 }
 
 // add registers a session. A Show that reconnects replaces its old session: the old connection

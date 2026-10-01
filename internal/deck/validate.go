@@ -196,6 +196,15 @@ func validateAction(path string, a *Action, p *Profile, add func(path, format st
 		} else if _, ok := p.Pages[v.Page]; !ok {
 			add(path+".page", "there is no page %q in this profile", v.Page)
 		}
+	case "stream.web":
+		var v struct {
+			URL string `json:"url"`
+		}
+		if a.Params(&v) != nil || strings.TrimSpace(v.URL) == "" {
+			add(path+".url", "is missing")
+		} else if u, err := url.Parse(strings.TrimSpace(v.URL)); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			add(path+".url", "%q is not an http:// or https:// address", v.URL)
+		}
 	case "toggle":
 		var v struct {
 			On  *Action `json:"on"`

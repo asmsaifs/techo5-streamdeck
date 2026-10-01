@@ -491,3 +491,53 @@ func TestNoTilerShowsNoValue(t *testing.T) {
 	}
 	quiet(t, s)
 }
+
+const streamPage = `{"default":{"pages":{"home":{"buttons":{"0,0":{"label":"Site","action":{"type":"stream.web","url":"https://example.com"}}}}}}}`
+
+// A stream button is the server's to carry out, not the runner's: the deck hands it over, and a
+// failure shows on the button.
+func TestStreamButtonGoesToTheServer(t *testing.T) {
+	c := testConfig(t, streamPage)
+	p := c.Profiles["default"]
+	run := &fakeRunner{}
+	got := make(chan string, 1)
+	r := render.New(t.TempDir())
+	s := New(func() *model.Config { return c }, "default", r, run, nil)
+	s.Stream = func(a *model.Action) error { got <- a.Type; return errors.New("no page") }
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := s.Start(ctx, size); err != nil {
+		t.Fatal(err)
+	}
+	next(t, s)
+	tapAt(s, model.Cell{}, p)
+	select {
+	case typ := <-got:
+		if typ != "stream.web" {
+			t.Errorf("handed over %q", typ)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the server was not asked")
+	}
+	if ran := run.ranList(); len(ran) != 0 {
+		t.Errorf("the runner got %v: a stream is not an action on the computer", ran)
+	}
+	next(t, s) // pressed
+	want := r.Grid(p, p.Pages["home"], size, render.State{{}: {Flash: render.FlashErr}})
+	if !same(next(t, s), want) {
+		t.Error("a stream that failed did not flash an error")
+	}
+}
+
+func TestStreamButtonWithNowhereToStreamFlashesError(t *testing.T) {
+	c := testConfig(t, streamPage)
+	p := c.Profiles["default"]
+	s, rd := start(t, c, &fakeRunner{})
+	next(t, s)
+	tapAt(s, model.Cell{}, p)
+	next(t, s) // pressed
+	want := rd.Grid(p, p.Pages["home"], size, render.State{{}: {Flash: render.FlashErr}})
+	if !same(next(t, s), want) {
+		t.Error("no error flash")
+	}
+}

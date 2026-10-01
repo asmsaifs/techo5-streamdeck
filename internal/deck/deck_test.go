@@ -150,6 +150,14 @@ func TestValidate(t *testing.T) {
 			"profiles":{"default":{"pages":{"home":{}}}}}`,
 			[]string{`integrations.homeassistant: "ftp://ha" is not an http:// or https:// address`,
 				`integrations.obs: "localhost" is not host:port, like localhost:4455`}},
+		{"websites", `{"default":{"pages":{"home":{"buttons":{
+			"0,0":{"action":{"type":"stream.web","url":"https://example.com"}},
+			"1,0":{"action":{"type":"stream.web"}},
+			"2,0":{"action":{"type":"stream.web","url":"example.com"}},
+			"3,0":{"action":{"type":"stream.web","url":"file:///etc/passwd"}}}}}}}`,
+			[]string{"profiles.default.pages.home.buttons.1,0.action.url: is missing",
+				`profiles.default.pages.home.buttons.2,0.action.url: "example.com" is not an http:// or https:// address`,
+				`profiles.default.pages.home.buttons.3,0.action.url: "file:///etc/passwd" is not an http:// or https:// address`}},
 		{"tiles", `{"default":{"pages":{"home":{"buttons":{
 			"0,0":{"tile":{"type":"clock","format":"sundial"}},
 			"1,0":{"tile":{"type":"ha_state","entity":"Sensor Kitchen"}},
