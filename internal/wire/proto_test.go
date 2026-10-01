@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"image"
@@ -108,5 +109,66 @@ func TestKeys(t *testing.T) {
 	}
 	if CheckKey("short") == nil {
 		t.Error("a short key passed")
+	}
+}
+
+func TestAudioNeedsTheCap(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		h    Hello
+		ok   bool
+	}{
+		{"old device", Hello{}, false},
+		{"another cap", Hello{Caps: []string{"hold1"}}, false},
+		{"audio device", Hello{Caps: []string{CapAudio}}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			s := NewSender(&buf)
+			s.SetCaps(tt.h)
+			for _, err := range []error{s.Audio(5, make([]byte, 8)), s.Clock(5), s.Setup(300)} {
+				if (err == nil) != tt.ok {
+					t.Fatalf("err = %v, want ok=%v", err, tt.ok)
+				}
+			}
+			if err := s.Send(7, nil); err != ErrNoCap {
+				t.Errorf("a kind nobody defined: err = %v", err)
+			}
+			if !tt.ok && buf.Len() != 0 {
+				t.Errorf("%d bytes went to a device that cannot take them", buf.Len())
+			}
+			if err := s.Problem("still fine"); err != nil {
+				t.Errorf("a picture kind refused: %v", err)
+			}
+		})
+	}
+}
+
+func TestAudioMessages(t *testing.T) {
+	var buf bytes.Buffer
+	s := NewSender(&buf)
+	s.SetCaps(Hello{Caps: []string{CapAudio}})
+	pcm := []byte{1, 2, 3, 4}
+	if err := s.Setup(300); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Clock(1234567); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Audio(-5, pcm); err != nil {
+		t.Fatal(err)
+	}
+	r := bufio.NewReader(&buf)
+	m, _ := ReadMsg(r)
+	if m.Kind != KindSetup || string(m.Data) != `{"latency_ms":300}` {
+		t.Errorf("setup = %d %q", m.Kind, m.Data)
+	}
+	m, _ = ReadMsg(r)
+	if m.Kind != KindClock || int64(binary.BigEndian.Uint64(m.Data)) != 1234567 {
+		t.Errorf("clock = %d %x", m.Kind, m.Data)
+	}
+	m, _ = ReadMsg(r)
+	if m.Kind != KindAudio || int64(binary.BigEndian.Uint64(m.Data)) != -5 || !bytes.Equal(m.Data[8:], pcm) {
+		t.Errorf("audio = %d %x", m.Kind, m.Data)
 	}
 }

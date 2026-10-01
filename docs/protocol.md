@@ -101,9 +101,14 @@ setting, default 0) so that picture and sound meet. The device needs to know not
 
 - A device without `audio1` gets exactly what it got before: kinds 1-3.
 - A server without audio never sends kinds 4-6; a device may advertise `audio1` to any server.
-- Today `internal/wire` parses `caps` (`Hello.Has`) and has constants for kinds 1-3 only. Kinds
-  4-6, a sender that refuses them for a device without the cap, and their round-trip tests come
-  with step 5.3; `cmd/fakeshow` plays them in step 5.5.
+- `internal/wire` has kinds 4-6 (`Sender.Audio`, `Clock`, `Setup`) and refuses them with `ErrNoCap`
+  unless `SetCaps` saw `audio1` in the hello; the server calls `SetCaps` on every connection.
+- `internal/audio` is the sending side: `Resampler` (any rate, mono or more channels, to 48 kHz
+  stereo), and `Stream`, which cuts 20 ms chunks, stamps them, sends the latency and clock first
+  and the clock every second, moves the timeline forward after a stall (more than 300 ms behind),
+  never stamps further ahead than the latency, and drops the oldest queued chunk when the sink is
+  slow. A source (5.4) calls `Stream.Write`.
+- `cmd/fakeshow` plays kinds 4/5 in step 5.5.
 
 ## Open
 

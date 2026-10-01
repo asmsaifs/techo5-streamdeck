@@ -23,12 +23,25 @@ import (
 //	KindHalf     2-byte x, 2-byte y, then a JPEG at half size, to draw doubled with its top left there
 //
 // Every Show that speaks dashcast knows these three. Later kinds are only sent to a device whose
-// hello lists the capability that names them.
+// hello lists the capability that names them (docs/protocol.md):
+//
+//	KindAudio  8-byte stamp (µs), then S16LE 48 kHz stereo PCM            needs CapAudio
+//	KindClock  8-byte stamp: this server's clock now                      needs CapAudio
+//	KindSetup  JSON {"latency_ms": n}: how long after its stamp to play   needs CapAudio
 const (
 	KindPicture = 1
 	KindProblem = 2
 	KindHalf    = 3
+	KindAudio   = 4
+	KindClock   = 5
+	KindSetup   = 6
 )
+
+// CapAudio is the hello capability that lets the server send kinds 4 to 6.
+const CapAudio = "audio1"
+
+// ErrNoCap is what Send returns for a kind the device did not advertise.
+var ErrNoCap = errors.New("wire: the device did not advertise the capability for that message")
 
 const (
 	// LineMax is the longest line a device may send: a hello or a touch is far shorter, and the limit
@@ -118,16 +131,33 @@ func (l *Lines) Touch() (Touch, error) {
 // Sender writes messages to one device. Pictures come from several goroutines, so writes are
 // serialized, and each has a deadline: a device that stopped reading must not hang the server.
 type Sender struct {
-	mu sync.Mutex
-	w  io.Writer
+	mu    sync.Mutex
+	w     io.Writer
+	audio bool
 }
 
+// NewSender sends to w. Until SetCaps says what the device understands, only kinds 1 to 3 go.
 func NewSender(w io.Writer) *Sender { return &Sender{w: w} }
+
+// SetCaps records what the device's hello advertised. Call it before the first Send.
+func (s *Sender) SetCaps(h Hello) {
+	s.mu.Lock()
+	s.audio = h.Has(CapAudio)
+	s.mu.Unlock()
+}
 
 type deadliner interface{ SetWriteDeadline(time.Time) error }
 
 // Send writes one message of kind, its payload the parts one after another.
 func (s *Sender) Send(kind byte, payload ...[]byte) error {
+	if kind >= KindAudio {
+		s.mu.Lock()
+		ok := s.audio && kind <= KindSetup
+		s.mu.Unlock()
+		if !ok {
+			return ErrNoCap
+		}
+	}
 	n := 1
 	for _, p := range payload {
 		n += len(p)
@@ -153,6 +183,28 @@ func (s *Sender) Send(kind byte, payload ...[]byte) error {
 // Picture sends a JPEG to draw with its top left at at; Half one at half size, to draw doubled.
 func (s *Sender) Picture(at image.Point, jpg []byte) error { return s.Send(KindPicture, pos(at), jpg) }
 func (s *Sender) Half(at image.Point, jpg []byte) error    { return s.Send(KindHalf, pos(at), jpg) }
+
+// Audio sends one chunk of 48 kHz stereo S16LE PCM, to be heard at stamp µs on this server's clock.
+func (s *Sender) Audio(stampUs int64, pcm []byte) error {
+	return s.Send(KindAudio, stamp(stampUs), pcm)
+}
+
+// Clock sends this server's clock, in µs, for the device to work out the difference from.
+func (s *Sender) Clock(nowUs int64) error { return s.Send(KindClock, stamp(nowUs)) }
+
+// Setup tells the device how long after its stamp to play a chunk.
+func (s *Sender) Setup(latencyMs int) error {
+	b, _ := json.Marshal(struct {
+		LatencyMs int `json:"latency_ms"`
+	}{latencyMs})
+	return s.Send(KindSetup, b)
+}
+
+func stamp(us int64) []byte {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], uint64(us))
+	return b[:]
+}
 
 // Problem sends a sentence for the screen to show.
 func (s *Sender) Problem(text string) error { return s.Send(KindProblem, []byte(text)) }
