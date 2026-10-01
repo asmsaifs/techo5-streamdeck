@@ -27,12 +27,13 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
 )
 
 func main() {
 	server := flag.String("server", "127.0.0.1:9555", "the deck server, host:port")
-	key := flag.String("key", "", "the deck's key (default: the one decksrv saved on this computer)")
+	key := flag.String("key", "", "the deck's key (default: the one in decksrv's config.json)")
 	name := flag.String("name", "Fake Show", "the device name sent in the hello")
 	size := flag.String("size", "960x480", "the screen, WxH: 960x480 is a Show 5, 1280x800 a Show 8")
 	caps := flag.String("caps", "", "comma-separated capabilities to advertise (none today)")
@@ -85,17 +86,17 @@ func parseSize(s string) (int, int, error) {
 	return w, h, nil
 }
 
-// savedKey is the key cmd/decksrv made and saved on its first run on this computer.
+// savedKey is the key in the config cmd/decksrv serves from: config.json in the user config folder.
 func savedKey() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := store.Dir()
 	if err != nil {
 		return "", err
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "techo5-streamdeck", "decksrv.key"))
+	c, err := store.Load(filepath.Join(dir, store.FileName))
 	if err != nil {
-		return "", fmt.Errorf("no -key given and no saved key: run decksrv once, or pass -key (%w)", err)
+		return "", fmt.Errorf("no -key given and no readable config: run decksrv once, or pass -key (%w)", err)
 	}
-	return strings.TrimSpace(string(b)), nil
+	return c.Server.Key, nil
 }
 
 // headless connects, waits for a picture, sends the taps (waiting for a picture after each), and

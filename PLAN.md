@@ -561,7 +561,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 1.1 Model + store
 - [x] 1.2 Renderer — line and image icons; emoji icons still draw the fallback glyph (needs a colour font)
 - [x] 1.3 Screen pipeline
-- [ ] 1.4 Server + DeckSource
+- [x] 1.4 Server + DeckSource — checked with fakeshow and in tests; real Show check open (as 0.3)
 - [ ] 1.5 First actions → **v0.1.0**
 - [ ] 2.1 Wails shell + tray
 - [ ] 2.2 Grid editor
