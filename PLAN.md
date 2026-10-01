@@ -577,7 +577,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 4.3 Video mode — `video` flag on `stream.web` and automatic switching in the screen encoder (half size, q70, 25 fps cap); not measured on the real Show
 - [x] 4.4 Warm tabs → **v0.3.0** (not tagged yet, same wait as v0.1.0) — last 2 pages parked 10 min (frozen, stream stopped), memory in the Shows panel. Open: desktop "login window" (sign in by touch for now), Chrome download
 - [x] 5.1 Protocol extension doc — docs/protocol.md (`audio1` cap, kinds 4/5/6, timing rules from cast); the wire constants and the device side come with 5.3/5.2
-- [ ] 5.2 Device audio (techo5, OTA)
+- [x] 5.2 Device audio (techo5, OTA) — committed in techo5, not released: the dashboard stream advertises `audio1` and plays kinds 4-6 through `cast.Playback`; unit-tested with a fake output, not heard on the real Show; nothing sends audio until 5.3/5.4
 - [ ] 5.3 Desktop audio pipeline
 - [ ] 5.4 Website audio capture
 - [ ] 5.5 fakeshow audio → **v0.4.0**
