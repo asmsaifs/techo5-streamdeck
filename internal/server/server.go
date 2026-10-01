@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/asmsaifs/techo5-streamdeck/internal/audio"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/screen"
@@ -332,6 +333,9 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 		Allow   []string `json:"allow"`
 		Profile string   `json:"profile"`
 		Video   bool     `json:"video"`
+		Sound   string   `json:"sound"`
+		// AVOffsetMs delays the sound to meet a picture that takes this long to arrive.
+		AVOffsetMs int `json:"av_offset_ms"`
 	}
 	if err := a.Params(&p); err != nil {
 		return fmt.Errorf("bad parameters: %w", err)
@@ -348,12 +352,23 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 	se.cmu.Unlock()
 	defer func() { se.cmu.Lock(); se.opening = false; se.cmu.Unlock() }()
 
-	src, err := s.Web.New(web.Spec{URL: p.URL, Allow: p.Allow, Profile: p.Profile})
+	src, err := s.Web.New(web.Spec{URL: p.URL, Allow: p.Allow, Profile: p.Profile, Sound: p.Sound})
 	if err != nil {
 		return err
 	}
 	// The source lives until the Show goes back to the deck or the session ends.
 	sctx, cancel := context.WithCancel(ctx)
+	// The page's sound goes to the Show when the tile says so and the Show can play it. Otherwise
+	// the tile still captures it (that is what keeps it off this computer's speakers) and drops it.
+	var snd *audio.Stream
+	if p.Sound == "" || p.Sound == web.SoundShow {
+		if se.hello.Has(wire.CapAudio) {
+			snd = audio.New(out, audio.Options{AVOffset: time.Duration(p.AVOffsetMs) * time.Millisecond})
+			src.SetSound(func(pcm []byte) { snd.Write(audio.Wire, pcm) })
+		} else {
+			s.log().Info("this Show cannot play sound: the page's sound is dropped", "name", se.hello.Name)
+		}
+	}
 	if err := src.Start(sctx, image.Pt(se.hello.W, se.hello.H)); err != nil {
 		cancel()
 		return err
@@ -388,7 +403,16 @@ func (s *Server) stream(ctx context.Context, se *session, out *wire.Sender, a *d
 		cancel()
 		return err
 	}
-	s.log().Info("showing a website", "name", se.hello.Name, "profile", src.Profile())
+	s.log().Info("showing a website", "name", se.hello.Name, "profile", src.Profile(), "sound", snd != nil)
+	if snd != nil {
+		// Started now, not before: the Show would play the page's sound over the deck while it loaded.
+		// What was written meanwhile is at most the latency's worth, the newest.
+		go func() {
+			if err := snd.Run(sctx); err != nil && sctx.Err() == nil {
+				s.log().Warn("sound", "name", se.hello.Name, "err", err)
+			}
+		}()
+	}
 
 	go func() {
 		defer cancel()

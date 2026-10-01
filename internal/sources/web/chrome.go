@@ -148,9 +148,19 @@ func (m *Manager) acquire(profile string) (*browser, error) {
 		chromedp.UserDataDir(dir),
 		chromedp.DisableGPU,
 		chromedp.Flag("hide-scrollbars", true),
-		// Sound goes to the Show in Phase 5; until then it must not come out of the computer.
-		chromedp.Flag("mute-audio", true),
+		// A tab that is being captured gets a "sharing this tab" bar, which takes 57 px off the page
+		// area and so off every frame, and the Show's frames must be exactly its size.
+		chromedp.Flag("disable-infobars", true),
+		// A tab's sound is captured by the page itself (sound.go) with no one to accept the prompt.
+		// Not --use-fake-ui-for-media-stream: with it Chrome offers the screen, not the tab.
+		chromedp.Flag("auto-accept-this-tab-capture", true),
+		chromedp.Flag("autoplay-policy", "no-user-gesture-required"),
 	)
+	// chromedp's defaults include mute-audio, which has to be undone: a muted tab's sound is silent
+	// to the capture too. What keeps a page off the computer's speakers is the capture itself, which
+	// asks for local playback to be suppressed (sound.go); only a tile that says "desktop" is not
+	// captured.
+	opts = append(opts, chromedp.Flag("mute-audio", false))
 	actx, acancel := chromedp.NewExecAllocator(m.root, opts...)
 	bctx, bcancel := chromedp.NewContext(actx, chromedp.WithErrorf(quiet))
 	// Started now rather than with the first tab, so a browser that cannot start says so at once.

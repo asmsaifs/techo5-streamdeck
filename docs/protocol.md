@@ -112,6 +112,9 @@ setting, default 0) so that picture and sound meet. The device needs to know not
 
 ## Open
 
+- The device holds the speaker from the first clock message until the connection ends, also
+  after the Show goes back to the deck. It should let go after a few seconds without audio.
+
 - The device side (5.2) is where the exact player hook-up lives; if it needs a different chunk
   size, change it here first.
 - Whether `latency_ms` should come from the device (its buffer) rather than the server: the

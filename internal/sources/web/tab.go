@@ -8,11 +8,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -41,6 +43,13 @@ type tab struct {
 	ctx     context.Context
 	closeFn func()
 	once    sync.Once
+
+	// binding is the name the page's capture script reports sound through. It is random per tab so
+	// that it is not a name another page script could be expecting.
+	binding string
+	// capturing is whether the page's sound is wanted: set while a source that sends it has the tab,
+	// so that a document loaded meanwhile starts capturing again.
+	capturing atomic.Bool
 
 	mu     sync.Mutex
 	owner  *Source
@@ -98,7 +107,7 @@ func (m *Manager) openTab(spec Spec, allow *Allow, profile string, size image.Po
 		return nil, false, fmt.Errorf("the browser would not open a window: %w", err)
 	}
 	u, _ := parseWeb(spec.URL)
-	t = &tab{m: m, b: b, profile: profile, key: key, spec: spec, allow: allow, ctx: ctx, closeFn: closeFn,
+	t = &tab{m: m, b: b, profile: profile, key: key, spec: spec, allow: allow, ctx: ctx, closeFn: closeFn, binding: newBinding(),
 		log: m.log().With("site", u.Hostname())}
 	chromedp.ListenTarget(ctx, func(ev any) {
 		switch e := ev.(type) {
@@ -108,6 +117,17 @@ func (m *Manager) openTab(spec Spec, allow *Allow, profile string, size image.Po
 			}
 		case *fetch.EventRequestPaused:
 			go t.onRequest(e)
+		case *runtime.EventBindingCalled:
+			t.onSound(e)
+		case *page.EventDomContentEventFired:
+			// A document that was loaded after the capture began has none of it.
+			if t.capturing.Load() {
+				go func() {
+					if err := t.startCapture(ctx); err != nil && ctx.Err() == nil {
+						t.log.Warn("sound", "err", err)
+					}
+				}()
+			}
 		}
 	})
 	// The tab dying (the browser crashed, the window was killed) takes it out of the pool and ends
@@ -195,6 +215,8 @@ func (m *Manager) park(t *tab) {
 		t.close()
 		return
 	}
+	t.capturing.Store(false)
+	t.stopCapture(t.ctx)
 	if err := chromedp.Run(t.ctx, page.StopScreencast(),
 		page.SetWebLifecycleState(page.SetWebLifecycleStateStateFrozen)); err != nil {
 		t.close()

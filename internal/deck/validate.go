@@ -198,12 +198,20 @@ func validateAction(path string, a *Action, p *Profile, add func(path, format st
 		}
 	case "stream.web":
 		var v struct {
-			URL string `json:"url"`
+			URL        string `json:"url"`
+			Sound      string `json:"sound"`
+			AVOffsetMs int    `json:"av_offset_ms"`
 		}
 		if a.Params(&v) != nil || strings.TrimSpace(v.URL) == "" {
 			add(path+".url", "is missing")
 		} else if u, err := url.Parse(strings.TrimSpace(v.URL)); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			add(path+".url", "%q is not an http:// or https:// address", v.URL)
+		}
+		if v.Sound != "" && v.Sound != "show" && v.Sound != "desktop" && v.Sound != "off" {
+			add(path+".sound", "%q is not show, desktop or off", v.Sound)
+		}
+		if v.AVOffsetMs < 0 || v.AVOffsetMs > 1000 {
+			add(path+".av_offset_ms", "must be between 0 and 1000")
 		}
 	case "toggle":
 		var v struct {

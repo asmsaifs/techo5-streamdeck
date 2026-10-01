@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -66,6 +67,7 @@ type show struct {
 	screen *image.RGBA
 	mu     sync.Mutex
 	msgs   chan wire.Msg
+	sound  []wire.Msg // kinds 4 and up, which settle sets aside
 }
 
 func startServer(t *testing.T, cfg *deck.Config, run *runner) (*Server, string) {
@@ -84,6 +86,12 @@ func startServer(t *testing.T, cfg *deck.Config, run *runner) (*Server, string) 
 
 func connect(t *testing.T, addr, key, name string) *show {
 	t.Helper()
+	return connectAs(t, addr, key, wire.Hello{Name: name, W: 960, H: 480})
+}
+
+// connectAs is connect for a device with its own hello, to try capabilities.
+func connectAs(t *testing.T, addr, key string, hello wire.Hello) *show {
+	t.Helper()
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +102,7 @@ func connect(t *testing.T, addr, key, name string) *show {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := json.Marshal(wire.Hello{Name: name, W: 960, H: 480})
+	b, _ := json.Marshal(hello)
 	if _, err := sc.Write(append(b, '\n')); err != nil {
 		t.Fatal(err)
 	}
@@ -143,6 +151,8 @@ func (s *show) draw(m wire.Msg) {
 // settle draws everything that arrives until it has been quiet for a while, and returns the screen.
 func (s *show) settle() *image.RGBA {
 	s.t.Helper()
+	// Quiet is measured in pictures: a stream of sound does not end it.
+	quiet := time.Now().Add(500 * time.Millisecond)
 	for {
 		select {
 		case m, ok := <-s.msgs:
@@ -152,8 +162,13 @@ func (s *show) settle() *image.RGBA {
 			if m.Kind == wire.KindProblem {
 				s.t.Fatalf("a problem: %s", m.Data)
 			}
+			if m.Kind >= wire.KindAudio {
+				s.sound = append(s.sound, m)
+				continue
+			}
 			s.draw(m)
-		case <-time.After(500 * time.Millisecond):
+			quiet = time.Now().Add(500 * time.Millisecond)
+		case <-time.After(time.Until(quiet)):
 			return s.screen
 		}
 	}
@@ -424,6 +439,80 @@ func TestWebsiteOnTheShow(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the tap did not reach the page: %v at the corner", colourAt(scr, 800, 400))
 		}
+	}
+}
+
+// A website's sound reaches a Show that said it can play it, latency and clock first, and a Show
+// that did not say so gets none of the new kinds.
+func TestWebsiteSoundOnTheShow(t *testing.T) {
+	if _, err := web.FindChrome(""); err != nil {
+		t.Skip(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<!doctype html><body style="margin:0;background:#f00"><script>
+const c = new AudioContext(); const o = c.createOscillator(); o.frequency.value = 440;
+o.connect(c.destination); o.start(); c.resume();</script>`)
+	}))
+	defer site.Close()
+
+	for _, tt := range []struct {
+		name  string
+		caps  []string
+		sound bool
+	}{
+		{"a Show that plays sound", []string{wire.CapAudio}, true},
+		{"an older Show", nil, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := streamConfig(t, site.URL)
+			srv, addr := startServer(t, cfg, &runner{})
+			srv.Web = web.NewManager(t.TempDir())
+			t.Cleanup(srv.Web.Close)
+			sh := connectAs(t, addr, key, wire.Hello{Name: "Kitchen", W: 960, H: 480, Caps: tt.caps})
+			sh.settle()
+			r := render.NewLayout(cfg.Profiles["default"].Grid, image.Pt(960, 480)).Rect(deck.Cell{})
+			sh.tap((r.Min.X+r.Max.X)/2, (r.Min.Y+r.Max.Y)/2)
+
+			deadline := time.Now().Add(30 * time.Second)
+			audio := func() (n, peak int) {
+				for _, m := range sh.sound {
+					if m.Kind == wire.KindAudio {
+						n++
+						for i := 8; i+1 < len(m.Data); i += 2 {
+							v := int(int16(binary.LittleEndian.Uint16(m.Data[i:])))
+							peak = max(peak, max(v, -v))
+						}
+					}
+				}
+				return
+			}
+			for {
+				scr := sh.settle()
+				if closeTo(colourAt(scr, 800, 400), [3]int{255, 0, 0}) {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the website never reached the Show")
+				}
+			}
+			for n, _ := audio(); tt.sound && n < 25 && time.Now().Before(deadline); n, _ = audio() {
+				sh.settle() // half a second of messages at a time
+			}
+			sh.settle()
+			n, peak := audio()
+			if !tt.sound {
+				if len(sh.sound) != 0 {
+					t.Errorf("an older Show was sent %d messages of the new kinds", len(sh.sound))
+				}
+				return
+			}
+			if sh.sound[0].Kind != wire.KindSetup || sh.sound[1].Kind != wire.KindClock {
+				t.Errorf("the first messages are kinds %d and %d, want the latency and the clock", sh.sound[0].Kind, sh.sound[1].Kind)
+			}
+			if peak < 4000 {
+				t.Errorf("%d audio messages, peak %d: silent", n, peak)
+			}
+		})
 	}
 }
 

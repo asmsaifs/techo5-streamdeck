@@ -86,6 +86,27 @@ Open risks for 5.4: a full navigation kills the injected script and its stream (
 DRM'd audio (Netflix, Spotify Web's Widevine) may capture as silence; check that tab capture
 keeps going while the tab is hidden behind another tab.
 
+## Step 5.4: website sound, as built (`internal/sources/web/sound.go`)
+
+Option A as the spike found it, with three things only a real tile showed:
+
+- **`--mute-audio` makes the capture silent.** chromedp's default flags include it, so the browser
+  has to be started with `mute-audio=false` explicitly. What keeps a page off the computer's
+  speakers is `suppressLocalAudioPlayback` while it is captured, so *every* tile except
+  `sound: "desktop"` captures; `off` captures and drops. A page that plays before its capture
+  starts (a second at most) can be heard on the computer.
+- **A captured tab gets a "sharing this tab" bar**, which takes 57 px off the page area, so every
+  screencast frame came out 960x423 and was dropped as the wrong size (the page still worked; the
+  Show saw nothing change). `--disable-infobars` removes it.
+- **Stop the capture's video track** (`getVideoTracks().forEach(t => t.stop())`); the audio
+  carries on and the page is not asked for frames it will not use.
+- PCM goes from the page to Go through a `Runtime.addBinding` (random name per tab), base64, one
+  20 ms block per call; no WebSocket and no port.
+- A full navigation starts the capture again from `Page.domContentEventFired` (the script is
+  `AddScriptToEvaluateOnNewDocument`); a parked tab stops it and a reused one starts it.
+- Tested with Chrome 154 on macOS (tone page: peak near full scale; survives a navigation).
+  Not yet tried: Windows, Linux, DRM'd audio (Spotify Web, Netflix), a tab hidden behind another.
+
 ## 3. macOS window + app audio capture: ScreenCaptureKit works (spike `spikes/sckit`)
 
 `swiftc -O -parse-as-library -o bin/sckit spikes/sckit/main.swift && bin/sckit <app or title>`

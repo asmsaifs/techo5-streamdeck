@@ -13,11 +13,13 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/wire"
@@ -32,6 +34,10 @@ type Spec struct {
 	// Profile names the browser profile, and with it which logins the page has. Empty: one per
 	// registrable domain, so two tiles of the same site share a sign-in.
 	Profile string
+	// Sound is where the page's sound goes: SoundShow (the default), SoundDesktop or SoundOff.
+	// Anything but SoundDesktop captures it, which is what keeps it off the computer's speakers;
+	// only SoundShow, and only if the source has somewhere to send it (SetSound), passes it on.
+	Sound string
 }
 
 // Pacing, as dashcast has it: after a frame that changed something the next is asked for almost
@@ -64,6 +70,11 @@ type Source struct {
 	closed bool
 	err    error
 
+	// snd takes the page's sound, 48 kHz stereo S16LE, if the Show can play it.
+	snd func(pcm []byte)
+	// tabp is the tab the source is showing, once it has one.
+	tabp atomic.Pointer[tab]
+
 	// The last frame as Chrome sent it, and how many in a row changed nothing.
 	pmu     sync.Mutex
 	lastRaw []byte
@@ -89,6 +100,20 @@ func (m *Manager) New(spec Spec) (*Source, error) {
 		frames:  make(chan *image.RGBA, 1),
 		touches: make(chan wire.Touch, touchQueue)}, nil
 }
+
+// SetSound gives the source somewhere to send the page's sound, as 48 kHz stereo S16LE PCM. Call it
+// before Start. Without it, or with Spec.Sound "off", the sound is captured and thrown away.
+func (s *Source) SetSound(f func(pcm []byte)) { s.snd = f }
+
+func (s *Source) sound(pcm []byte) {
+	if s.snd != nil && s.spec.Sound != SoundOff {
+		s.snd(pcm)
+	}
+}
+
+// wantsSound is whether the page's sound is to be captured: always, unless it is to come out of
+// the computer.
+func (s *Source) wantsSound() bool { return s.spec.Sound != SoundDesktop }
 
 // Start opens the page and returns at once; the first frame comes when the page has drawn.
 func (s *Source) Start(ctx context.Context, size image.Point) error {
@@ -161,6 +186,7 @@ func (s *Source) run() {
 		return
 	}
 	t.setOwner(s)
+	s.tabp.Store(t)
 	// A tile that ends well is parked for the next one that wants the same page; one that failed
 	// is not worth keeping.
 	defer func() {
@@ -186,6 +212,13 @@ func (s *Source) run() {
 				_, err := page.AddScriptToEvaluateOnNewDocument(s.allow.guardScript()).Do(ctx)
 				return err
 			}),
+			chromedp.ActionFunc(func(ctx context.Context) error {
+				if err := runtime.AddBinding(t.binding).Do(ctx); err != nil {
+					return err
+				}
+				_, err := page.AddScriptToEvaluateOnNewDocument(captureSource(t.binding)).Do(ctx)
+				return err
+			}),
 			// Only main-page navigations are looked at; everything else goes on without being paused.
 			fetch.Enable().WithPatterns([]*fetch.RequestPattern{{
 				ResourceType: network.ResourceTypeDocument, RequestStage: fetch.RequestStageRequest}}),
@@ -203,6 +236,12 @@ func (s *Source) run() {
 		s.fail(fmt.Errorf("the page would not open: %w", err))
 		return
 	}
+	if s.wantsSound() {
+		t.capturing.Store(true)
+		if err := t.startCapture(rc); err != nil && s.ctx.Err() == nil {
+			s.log.Warn("sound", "err", err)
+		}
+	}
 	s.log.Info("page opened", "profile", s.profile, "allowed", s.allow.Domains(), "warm", reused)
 	// Chrome sends a frame when something is drawn, and a page that has finished loading and
 	// stands still draws nothing more: the Show would wait for ever for its first picture.
@@ -219,6 +258,15 @@ func (s *Source) run() {
 			}
 		}
 	}
+}
+
+// navigate sends the page to url, for the tests: a Show cannot do this, only the page's own links.
+func (s *Source) navigate(url string) error {
+	t := s.tabp.Load()
+	if t == nil {
+		return errors.New("no tab")
+	}
+	return chromedp.Run(t.ctx, chromedp.Navigate(url))
 }
 
 // snapshot sends the page as it is now.
