@@ -101,3 +101,16 @@ keeps going while the tab is hidden behind another tab.
   a shipped helper will need its own grant (6.2's guided check screen).
 - Every frame came back `.complete`: SCK did not mark unchanged frames idle for this window, so
   the Go side's tile diff (1.3) is what keeps a static window at 0 bytes/s.
+
+## Step 1.2: renderer
+
+- **Lucide dropped its brand icons** (youtube, github, ...), so `lucide:youtube` in the plan's
+  example config draws the fallback glyph (a question mark in a circle). The bundled set is
+  lucide-static 1.49.0 (2121 icons, `internal/render/lucide/`, about 1 MB). A brand button needs an
+  image in `icons/` for now; the icon picker (2.3) should say so.
+- **Emoji are not drawn yet.** Go has no colour-emoji renderer; they get the fallback glyph. Options
+  when it matters: embed a monochrome Noto Emoji, or rasterize through the OS in a helper.
+- **Font is Go Bold** (from `golang.org/x/image`), not Inter: it is already in the module cache and
+  needs no licence file. Swapping is one line in `render.New`.
+- Cell and Grid pixels match to within 2 levels, not exactly: the rasterizer rounds antialiased
+  edges differently at another offset. Invisible, and fine for repainting one cell.

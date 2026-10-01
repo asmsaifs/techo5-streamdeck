@@ -559,7 +559,7 @@ Use `image/jpeg` first; if encode is too slow, switch to `github.com/pixiv/go-li
 - [x] 0.4 fakeshow simulator
 - [ ] 0.5 Spikes (Wails/hotkeys, web audio, ScreenCaptureKit) — macOS done (docs/spikes.md); Windows, Linux and the hands-on tray/hotkey check open
 - [x] 1.1 Model + store
-- [ ] 1.2 Renderer
+- [x] 1.2 Renderer — line and image icons; emoji icons still draw the fallback glyph (needs a colour font)
 - [ ] 1.3 Screen pipeline
 - [ ] 1.4 Server + DeckSource
 - [ ] 1.5 First actions → **v0.1.0**
