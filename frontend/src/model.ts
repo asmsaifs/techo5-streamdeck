@@ -1,0 +1,209 @@
+// The config as the editor edits it, and the pure operations on it. Everything here returns a new
+// config and never changes the one it is given, so undo is a stack of old configs.
+
+export interface Action {
+  type: string;
+  [param: string]: unknown;
+}
+export interface Button {
+  label?: string;
+  icon?: string;
+  action?: Action;
+}
+export interface Page {
+  buttons: Record<string, Button>;
+}
+export interface Grid {
+  cols: number;
+  rows: number;
+  gap: number;
+  radius: number;
+}
+export interface Theme {
+  bg: string;
+  button: string;
+  text: string;
+  accent: string;
+}
+export interface Profile {
+  grid: Grid;
+  theme: Theme;
+  pages: Record<string, Page>;
+}
+export interface Config {
+  version: number;
+  server: { listen: string; key: string };
+  devices?: Record<string, { profile: string }>;
+  profiles: Record<string, Profile>;
+  hotkeys?: Record<string, unknown>;
+}
+
+export const HOME = "home";
+
+export const cellKey = (col: number, row: number) => `${col},${row}`;
+
+export function parseCell(key: string): [number, number] {
+  const [c, r] = key.split(",").map(Number);
+  return [c, r];
+}
+
+const clone = <T,>(v: T): T => structuredClone(v);
+
+/** Changes one page of one profile through fn, which edits a private copy. */
+function editPage(cfg: Config, profile: string, page: string, fn: (p: Page) => void): Config {
+  const next = clone(cfg);
+  const pg = next.profiles[profile]?.pages[page];
+  if (!pg) return cfg;
+  fn(pg);
+  return next;
+}
+
+export function setButton(cfg: Config, profile: string, page: string, key: string, b: Button | null): Config {
+  return editPage(cfg, profile, page, (pg) => {
+    if (b) pg.buttons[key] = clone(b);
+    else delete pg.buttons[key];
+  });
+}
+
+/** Moves the button at `from` to `to`; if `to` has one, they swap. */
+export function moveButton(cfg: Config, profile: string, page: string, from: string, to: string): Config {
+  if (from === to) return cfg;
+  return editPage(cfg, profile, page, (pg) => {
+    const a = pg.buttons[from];
+    const b = pg.buttons[to];
+    if (a) pg.buttons[to] = a;
+    else delete pg.buttons[to];
+    if (b) pg.buttons[from] = b;
+    else delete pg.buttons[from];
+  });
+}
+
+/** A new button for an action type dropped from the palette. */
+export function newButton(type: string, firstPage?: string): Button {
+  const action: Action = { type };
+  if (type === "page" && firstPage) action.page = firstPage;
+  return { label: PALETTE_LABELS[type] ?? type, action };
+}
+
+export const PALETTE_LABELS: Record<string, string> = {
+  page: "Folder",
+  back: "Back",
+  "open.url": "Open site",
+  "open.app": "Open app",
+  "open.file": "Open file",
+  keys: "Hotkey",
+  type: "Type text",
+  run: "Run command",
+  delay: "Delay",
+  multi: "Multi",
+  toggle: "Toggle",
+};
+export const ACTION_TYPES = Object.keys(PALETTE_LABELS);
+
+/** Why the grid cannot shrink to cols by rows, or null when it can. */
+export function shrinkBlocker(p: Profile, cols: number, rows: number): string | null {
+  for (const [name, pg] of Object.entries(p.pages)) {
+    for (const key of Object.keys(pg.buttons)) {
+      const [c, r] = parseCell(key);
+      if (c >= cols || r >= rows) return `Page "${name}" has a button at ${key}, outside ${cols}×${rows}. Move or delete it first.`;
+    }
+  }
+  return null;
+}
+
+export function setGrid(cfg: Config, profile: string, patch: Partial<Grid>): Config {
+  const next = clone(cfg);
+  Object.assign(next.profiles[profile].grid, patch);
+  return next;
+}
+
+export function setTheme(cfg: Config, profile: string, patch: Partial<Theme>): Config {
+  const next = clone(cfg);
+  Object.assign(next.profiles[profile].theme, patch);
+  return next;
+}
+
+/** Calls fn on an action and on the actions inside it (a toggle's halves, a multi's steps). */
+function walk(a: Action | undefined, fn: (a: Action) => void) {
+  if (!a || typeof a !== "object") return;
+  fn(a);
+  walk(a.on as Action | undefined, fn);
+  walk(a.off as Action | undefined, fn);
+  if (Array.isArray(a.steps)) a.steps.forEach((s) => walk(s as Action, fn));
+}
+
+/** The "page" and "pageName" buttons that open `page`, as [page, cell] pairs. */
+export function pageReferences(p: Profile, page: string): [string, string][] {
+  const out: [string, string][] = [];
+  for (const [pn, pg] of Object.entries(p.pages)) {
+    for (const [key, b] of Object.entries(pg.buttons)) {
+      walk(b.action, (a) => {
+        if (a.type === "page" && a.page === page) out.push([pn, key]);
+      });
+    }
+  }
+  return out;
+}
+
+export function addPage(cfg: Config, profile: string, name: string): Config {
+  const next = clone(cfg);
+  next.profiles[profile].pages[name] = { buttons: {} };
+  return next;
+}
+
+/** Renames a page, and every folder button that opens it. */
+export function renamePage(cfg: Config, profile: string, from: string, to: string): Config {
+  const next = clone(cfg);
+  const p = next.profiles[profile];
+  p.pages[to] = p.pages[from];
+  delete p.pages[from];
+  for (const pg of Object.values(p.pages)) {
+    for (const b of Object.values(pg.buttons)) {
+      walk(b.action, (a) => {
+        if (a.type === "page" && a.page === from) a.page = to;
+      });
+    }
+  }
+  return next;
+}
+
+/** Why a page cannot be deleted, or null when it can. */
+export function deleteBlocker(p: Profile, page: string): string | null {
+  if (page === HOME) return `"${HOME}" is the page the deck opens on.`;
+  const refs = pageReferences(p, page);
+  if (refs.length) return `A folder button still opens it: page "${refs[0][0]}", cell ${refs[0][1]}.`;
+  return null;
+}
+
+export function deletePage(cfg: Config, profile: string, page: string): Config {
+  const next = clone(cfg);
+  delete next.profiles[profile].pages[page];
+  return next;
+}
+
+/** The page name problem for a new or renamed page, or null. */
+export function pageNameProblem(p: Profile, name: string): string | null {
+  if (!name.trim()) return "A page needs a name.";
+  if (name in p.pages) return `There is already a page "${name}".`;
+  return null;
+}
+
+/** An undo history of configs. */
+export interface History {
+  past: Config[];
+  present: Config;
+  future: Config[];
+}
+export const start = (c: Config): History => ({ past: [], present: c, future: [] });
+export function commit(h: History, c: Config): History {
+  if (c === h.present) return h;
+  return { past: [...h.past, h.present].slice(-200), present: c, future: [] };
+}
+export function undo(h: History): History {
+  if (!h.past.length) return h;
+  return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] };
+}
+export function redo(h: History): History {
+  if (!h.future.length) return h;
+  return { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) };
+}

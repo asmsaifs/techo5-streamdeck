@@ -6,6 +6,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"log/slog"
 	"os"
@@ -19,9 +20,10 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 )
 
-// The editor UI. Step 2.2 replaces this placeholder with the built React app.
+// The editor UI, built by "npm run build" in frontend/. dist/ holds only a .gitkeep until then, so
+// the Go code still builds from a fresh checkout; the window is just empty.
 //
-//go:embed frontend/index.html
+//go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
@@ -38,6 +40,10 @@ func main() {
 }
 
 func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
+	ui, err := fs.Sub(assets, "frontend/dist")
+	if err != nil {
+		return err
+	}
 	c, err := core.New(core.Options{Dir: dir, Listen: listen, DryRun: dry})
 	if err != nil {
 		return err
@@ -50,8 +56,9 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 	}
 
 	app := application.New(application.Options{
-		Name:   "TECHO5 Stream Deck",
-		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
+		Name:     "TECHO5 Stream Deck",
+		Services: []application.Service{application.NewService(&Editor{core: c})},
+		Assets:   application.AssetOptions{Handler: application.BundledAssetFileServer(ui)},
 		Mac: application.MacOptions{
 			// A tray app: no Dock icon.
 			ActivationPolicy: application.ActivationPolicyAccessory,
@@ -63,7 +70,7 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		Width:  1100,
 		Height: 720,
 		Hidden: hidden,
-		URL:    "/frontend/index.html",
+		URL:    "/",
 	})
 	// Closing the editor must not end the deck: hide to the tray instead.
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
