@@ -222,7 +222,7 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 	_ = raw.SetDeadline(time.Time{})
 
 	out := wire.NewSender(c)
-	out.SetCaps(h) // kinds beyond the first three go only to a device that said it takes them
+	out.SetCaps(h)   // kinds beyond the first three go only to a device that said it takes them
 	cfg = s.Config() // the config may have been reloaded while the handshake ran
 	name := s.effective(cfg, h.Name)
 	if cfg.Profiles[name] == nil {
