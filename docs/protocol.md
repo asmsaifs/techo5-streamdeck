@@ -101,6 +101,32 @@ setting, default 0) so that picture and sound meet. The device needs to know not
 
 **Bit rate.** 48 kHz stereo S16 is 1.5 Mbit/s, on top of the pictures.
 
+## Device polish (Phase 7)
+
+These change the device's settings and gestures, not the wire.
+
+- **Own server setting.** The Show has a *Stream Deck* server (address + key; setup page,
+  Connections tab, or the `deck_server` action), separate from the dashboard's dashcast server, so
+  both can be set. The device's config key is `deck`; an empty address turns the deck off.
+- **Opening.** With a deck server set, a swipe in from the **right** edge opens the deck (the
+  dashboard keeps the left edge, and leaves with it). The drawer, which that swipe opened before,
+  is then a swipe in from the right on the deck itself. `Open sheet` takes `deck` as a name.
+- **Idle.** *Deck when idle* (switch `screen_deck_idle`, or the checkbox on the setup page) shows
+  the deck in place of the clock; a dashboard opened by hand wins over it, and it wins over an idle
+  dashboard. Putting it away shows the clock for two minutes.
+- **Hello.** The deck's hello is the usual one with `path` empty and no `kiosk`.
+- **Offline.** When the connection drops the last picture stays up, greyed, with "Deck offline"
+  along the foot, and the device reconnects at 1 s, 2 s ... 30 s; a connection that lasted more
+  than 30 s starts the backoff over, so a restarted server is found again within a second.
+- **Discovery.** The app announces `_techo5deck._tcp` (port = the listen port; TXT `name=<computer>`,
+  `v=1`) unless it listens on loopback. The setup page's *Look for decks* button browses for two
+  seconds and offers what it heard as choices for the address field. The key is still typed on the
+  Show: nothing heard on the network is trusted, and a found deck only saves typing its address.
+
+Not done: the 6-digit pairing code with a Noise XXpsk key exchange, and a click sound on press
+(the speaker is claimed for a sound, which would cut a streamed sound off; it needs an overlay on
+the stream's player first).
+
 ## Compatibility and tests
 
 - A device without `audio1` gets exactly what it got before: kinds 1-3.

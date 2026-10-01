@@ -18,6 +18,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/actions"
 	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
+	"github.com/asmsaifs/techo5-streamdeck/internal/discovery"
 	"github.com/asmsaifs/techo5-streamdeck/internal/foreground"
 	"github.com/asmsaifs/techo5-streamdeck/internal/render"
 	"github.com/asmsaifs/techo5-streamdeck/internal/secrets"
@@ -236,8 +237,15 @@ func (c *Core) Start() error {
 	ctx, cancel := context.WithCancel(c.root)
 	done := make(chan struct{})
 	c.cancel, c.done, c.addr = cancel, done, ln.Addr()
+	// Announcing is a convenience: a network that does not allow multicast still has a deck, it
+	// is just typed in on the Show.
+	ad, err := discovery.Advertise(ln.Addr())
+	if err != nil {
+		slog.Warn("could not announce the deck on the network", "err", err)
+	}
 	go func() {
 		defer close(done)
+		defer ad.Stop()
 		if err := c.Server.Serve(ctx, ln); err != nil {
 			slog.Error("deck server stopped", "err", err)
 		}
