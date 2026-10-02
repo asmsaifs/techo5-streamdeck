@@ -195,12 +195,18 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 		return func(s string) float64 { w, _ := dc.MeasureString(s); return w }
 	}
 
+	// A button that is on may have a picture of its own.
+	iconName := b.Icon
+	if st.On && b.IconOn != "" {
+		iconName = b.IconOn
+	}
+
 	var lines []string
 	var px int
 	var lineH float64
 	if b.Label != "" {
 		base := 0.13 * h
-		if b.Icon == "" {
+		if iconName == "" {
 			base = 0.17 * h // alone, the label can be bigger
 		}
 		lines, px = fitLabel(b.Label, w-2*pad, base, measure)
@@ -224,7 +230,7 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 	var ic *image.RGBA
 	var iconSize float64
 	iconCY := cy
-	if b.Icon != "" && st.Text == "" {
+	if iconName != "" && st.Text == "" {
 		if len(lines) == 0 {
 			iconSize = 0.6 * min(w, h)
 		} else {
@@ -234,7 +240,7 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 			iconSize = min(bottom-top, 0.55*min(w, h))
 			iconCY = (top + bottom) / 2
 		}
-		ic = r.icon(b.Icon, round(iconSize), fg)
+		ic = r.icon(iconName, round(iconSize), fg)
 	}
 	if ic != nil {
 		sz := ic.Bounds().Dx()

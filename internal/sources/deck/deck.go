@@ -248,16 +248,22 @@ func (s *Source) Refresh() {
 	// A live tile's value is its button's text; a state tile says whether it is on.
 	s.mu.Lock()
 	for key, b := range pg.Buttons {
-		if b == nil || b.Tile == nil {
+		if b == nil {
+			continue
+		}
+		tile := tileOf(b)
+		if tile == nil {
 			continue
 		}
 		tv := s.tvals[name+"/"+key]
 		c, err := model.ParseCell(key)
-		if tv == nil || tv.sig != tileSig(b.Tile) || err != nil {
+		if tv == nil || tv.sig != tileSig(tile) || err != nil {
 			continue
 		}
 		v := st[c]
 		switch {
+		case tv.val.Err != nil && b.Tile == nil:
+			continue // a mute button that cannot tell keeps its off look; no dash over its icon
 		case tv.val.Err != nil:
 			v.Text = "—"
 		case tv.val.On != nil:
@@ -442,6 +448,15 @@ type tileVal struct {
 	busy bool
 }
 
+// tileOf is the tile a button is read by: its own, or the one a mute button with a muted icon
+// implies.
+func tileOf(b *model.Button) *model.Tile {
+	if b.Tile != nil {
+		return b.Tile
+	}
+	return b.ImplicitTile()
+}
+
 func tileSig(t *model.Tile) string { return fmt.Sprintf("%+v", *t) }
 
 func (s *Source) kickTiles() {
@@ -478,14 +493,18 @@ func (s *Source) pollTiles() {
 		return
 	}
 	for key, b := range pg.Buttons {
-		if b == nil || b.Tile == nil {
+		if b == nil {
+			continue
+		}
+		tile := tileOf(b)
+		if tile == nil {
 			continue
 		}
 		cell, err := model.ParseCell(key)
 		if err != nil {
 			continue
 		}
-		tile, k, sig := b.Tile, name+"/"+key, tileSig(b.Tile)
+		k, sig := name+"/"+key, tileSig(tile)
 		s.mu.Lock()
 		tv := s.tvals[k]
 		if tv == nil || tv.sig != sig {

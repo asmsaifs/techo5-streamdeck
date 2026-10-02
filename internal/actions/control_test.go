@@ -184,3 +184,30 @@ func TestControlHandlers(t *testing.T) {
 		t.Errorf("a bad action reached the system: %+v", f.controls)
 	}
 }
+
+func TestMuted(t *testing.T) {
+	say := func(out string) env {
+		return env{run: func(context.Context, string, ...string) (string, error) { return out, nil },
+			have: func(n string) bool { return n == "wpctl" }}
+	}
+	for _, c := range []struct {
+		goos, kind, out string
+		want            bool
+	}{
+		{"darwin", "volume.mute", "true", true},
+		{"darwin", "volume.mute", "false", false},
+		{"darwin", "mic.mute", "0", true},
+		{"darwin", "mic.mute", "75", false},
+		{"linux", "volume.mute", "Volume: 0.40 [MUTED]", true},
+		{"linux", "mic.mute", "Volume: 1.00", false},
+	} {
+		e := say(c.out)
+		e.goos = c.goos
+		if got, err := e.muted(context.Background(), c.kind); err != nil || got != c.want {
+			t.Errorf("%s %s %q = %v, %v; want %v", c.goos, c.kind, c.out, got, err, c.want)
+		}
+	}
+	if _, err := (env{goos: "windows"}).muted(context.Background(), "volume.mute"); err == nil {
+		t.Error("Windows claimed to read the mute")
+	}
+}

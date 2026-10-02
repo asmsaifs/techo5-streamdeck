@@ -8,6 +8,8 @@ export interface Action {
 export interface Button {
   label?: string;
   icon?: string;
+  /** Drawn instead of icon while the button is on (a toggle, a state tile, a mute that is muted). */
+  iconOn?: string;
   action?: Action;
   tile?: Tile;
 }

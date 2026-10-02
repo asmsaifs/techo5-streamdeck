@@ -96,6 +96,7 @@ func New(o Options) (*Core, error) {
 		App:      &appsrc.Manager{Launch: c.launchApp},
 	}
 	env := tiles.OSEnv(c.Actions.HAState)
+	env.Muted = actions.Muted
 	if o.DryRun {
 		// A dry run does nothing to the computer, and a script tile is a command it would run.
 		env.Output = func(context.Context, string, []string, bool) (string, error) { return "dry run", nil }

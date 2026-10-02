@@ -362,3 +362,22 @@ func skipGoldensOffMac(t *testing.T) {
 		t.Skip("goldens are made on macOS; text rasterises differently elsewhere")
 	}
 }
+
+func TestIconOn(t *testing.T) {
+	r := New(t.TempDir())
+	p := &deck.Profile{Grid: deck.DefaultGrid, Theme: deck.DefaultTheme}
+	size := image.Pt(160, 160)
+	c := deck.Cell{}
+	draw := func(b *deck.Button, on bool) []byte {
+		return r.Cell(p, b, c, size, CellState{On: on}).Pix
+	}
+	two := &deck.Button{Icon: "lucide:mic", IconOn: "lucide:mic-off"}
+	one := &deck.Button{Icon: "lucide:mic"}
+	if bytes.Equal(draw(two, false), draw(two, true)) {
+		t.Error("a button with an on icon looks the same on and off")
+	}
+	// Off, it is the plain icon; on without an on icon, the ring is all that changes.
+	if !bytes.Equal(draw(two, false), draw(one, false)) {
+		t.Error("off, a button with an on icon differs from one without")
+	}
+}

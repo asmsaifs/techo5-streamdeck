@@ -362,6 +362,7 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
   const prof = p.cfg.profiles[p.profile];
   const b = p.sel ? prof.pages[p.page].buttons[p.sel] : undefined;
   const [picking, setPicking] = useState(false);
+  const [pickingOn, setPickingOn] = useState(false);
   const [moved, setMoved] = useState<string | null>(null);
   const [asJSON, setAsJSON] = useState(false);
   const [json, setJson] = useState("");
@@ -385,6 +386,12 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
   const schema = b?.action ? p.schemas[b.action.type] : undefined;
   const problems = b?.action ? actionProblems(p.schemas, b.action) : [];
   const pages = Object.keys(prof.pages).filter((n) => n !== p.page);
+  // The buttons that know whether they are on can show another icon then.
+  const kind = b?.action?.type;
+  const twoState = kind === "toggle" || kind === "volume.mute" || kind === "mic.mute" || b?.tile?.type === "state";
+  const mute = kind === "volume.mute" || kind === "mic.mute";
+  const onWord = mute ? "Icon when muted" : "Icon when on";
+  const onHelp = mute ? "Shown while it is muted. Windows cannot tell, so there it keeps the first icon." : "Shown while the button is on.";
   const userFile = b?.icon && !b.icon.startsWith("lucide:") ? b.icon : "";
   // Folders and Back move around on a Show's screen, so a hotkey cannot press them.
   const hotkeyable = !!b?.action && b.action.type !== "page" && b.action.type !== "back";
@@ -427,6 +434,25 @@ function Inspector(p: { cfg: m.Config; profile: string; page: string; sel: strin
           value={b?.icon}
           onClose={() => setPicking(false)}
           onPick={(icon) => (set({ icon }), setPicking(false))}
+        />
+      )}
+      {twoState && (
+        <label>
+          {onWord}
+          <div className="row">
+            <button className="iconbtn" style={{ flex: 1 }} onClick={() => setPickingOn(true)}>
+              {b?.iconOn ? b.iconOn.replace(/^lucide:/, "") : "Same icon"}
+            </button>
+            <button disabled={!b?.iconOn} onClick={() => set({ iconOn: undefined })}>Clear</button>
+          </div>
+          <small className="hint">{onHelp}</small>
+        </label>
+      )}
+      {pickingOn && (
+        <IconPicker
+          value={b?.iconOn}
+          onClose={() => setPickingOn(false)}
+          onPick={(icon) => (set({ iconOn: icon }), setPickingOn(false))}
         />
       )}
 

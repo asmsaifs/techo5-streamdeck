@@ -98,8 +98,11 @@ type Page struct {
 
 // Button is one cell.
 type Button struct {
-	Label  string  `json:"label,omitempty"`
-	Icon   string  `json:"icon,omitempty"` // "lucide:youtube", an emoji, or a file in icons/
+	Label string `json:"label,omitempty"`
+	Icon  string `json:"icon,omitempty"` // "lucide:youtube", an emoji, or a file in icons/
+	// IconOn is drawn instead of Icon while the button is on: a toggle that is on, a state tile
+	// that says yes, or a mute button while the sound (or microphone) is muted.
+	IconOn string  `json:"iconOn,omitempty"`
 	Action *Action `json:"action,omitempty"`
 	// Tile makes the button live: its big text is a value that is read again every few seconds.
 	Tile *Tile `json:"tile,omitempty"`
@@ -113,7 +116,20 @@ const (
 	TileHA     = "ha_state" // a Home Assistant entity's state, Entity
 	TileScript = "script"   // the first line a command prints
 	TileState  = "state"    // no text: a command says whether the button's toggle is really on
+	TileMute   = "mute"     // no text: whether the sound (Command "volume.mute") or the microphone ("mic.mute") is muted
 )
+
+// ImplicitTile is the tile a button gets without having one: a mute button with an icon for the
+// muted state needs to know whether it is muted. Nil for any other button.
+func (b *Button) ImplicitTile() *Tile {
+	if b.Tile != nil || b.IconOn == "" || b.Action == nil {
+		return nil
+	}
+	if b.Action.Type == "volume.mute" || b.Action.Type == "mic.mute" {
+		return &Tile{Type: TileMute, Command: b.Action.Type}
+	}
+	return nil
+}
 
 // Tile is what a live button shows. Only the parameters of its Type are used.
 type Tile struct {

@@ -35,6 +35,8 @@ type Env struct {
 	RAM func(ctx context.Context) (float64, error) // percent
 	// HA is a Home Assistant entity's state, with its unit when it has one.
 	HA func(ctx context.Context, entity string) (string, error)
+	// Muted says whether the sound ("volume.mute") or the microphone ("mic.mute") is muted.
+	Muted func(ctx context.Context, kind string) (bool, error)
 	// Output runs a program, or a shell line, and returns what it printed. A *exec.ExitError says
 	// it ran and exited with a failure.
 	Output func(ctx context.Context, command string, args []string, shell bool) (string, error)
@@ -91,6 +93,8 @@ func Every(t *deck.Tile) time.Duration {
 		return 2 * time.Second
 	case deck.TileScript:
 		return 10 * time.Second
+	case deck.TileMute:
+		return 2 * time.Second // a mute changed with the keyboard should show soon
 	}
 	return 5 * time.Second
 }
@@ -119,6 +123,15 @@ func Read(ctx context.Context, e Env, t *deck.Tile) Value {
 			return Value{Err: failure(err)}
 		}
 		return Value{Text: oneLine(out)}
+	case deck.TileMute:
+		if e.Muted == nil {
+			return Value{Err: errors.New("this computer cannot say if it is muted")}
+		}
+		on, err := e.Muted(ctx, t.Command)
+		if err != nil {
+			return Value{Err: err}
+		}
+		return Value{On: &on}
 	case deck.TileState:
 		out, err := e.Output(ctx, t.Command, t.Args, t.Shell)
 		var exit *exec.ExitError

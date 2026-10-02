@@ -324,3 +324,41 @@ func registerControls(r *Registry) {
 	r.Register("volume.mute", muteAction("volume.mute"))
 	r.Register("mic.mute", muteAction("mic.mute"))
 }
+
+// Muted says whether the sound ("volume.mute") or the microphone ("mic.mute") is muted now, for a
+// button that shows it. Windows cannot say: its mute is a key press.
+func Muted(ctx context.Context, kind string) (bool, error) { return osEnv().muted(ctx, kind) }
+
+func (e env) muted(ctx context.Context, kind string) (bool, error) {
+	if kind != "volume.mute" && kind != "mic.mute" {
+		return false, fmt.Errorf("%s has no mute to read", kind)
+	}
+	switch e.goos {
+	case "darwin":
+		get := func(what string) (string, error) {
+			return e.run(ctx, "osascript", "-e", what+" of (get volume settings)")
+		}
+		if kind == "volume.mute" {
+			out, err := get("output muted")
+			return out == "true", err
+		}
+		// macOS has no input mute: mic.mute sets the level to 0, so 0 is muted.
+		out, err := get("input volume")
+		return out == "0", err
+	case "linux":
+		wpDev, paCmd, paDev := "@DEFAULT_AUDIO_SINK@", "get-sink-mute", "@DEFAULT_SINK@"
+		if kind == "mic.mute" {
+			wpDev, paCmd, paDev = "@DEFAULT_AUDIO_SOURCE@", "get-source-mute", "@DEFAULT_SOURCE@"
+		}
+		if e.have("wpctl") {
+			out, err := e.run(ctx, "wpctl", "get-volume", wpDev) // "Volume: 0.40 [MUTED]"
+			return strings.Contains(out, "[MUTED]"), err
+		}
+		if e.have("pactl") {
+			out, err := e.run(ctx, "pactl", paCmd, paDev) // "Mute: yes"
+			return strings.Contains(out, "yes"), err
+		}
+		return false, errors.New("neither wpctl nor pactl is installed")
+	}
+	return false, errors.New("this OS cannot say if it is muted")
+}
