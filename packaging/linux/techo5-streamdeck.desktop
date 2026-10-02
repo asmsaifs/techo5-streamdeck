@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=TECHO5 Stream Deck
+Comment=Use an Echo Show as a Stream Deck
+Exec=techo5-streamdeck
+Icon=techo5-streamdeck
+Categories=Utility;
+Terminal=false

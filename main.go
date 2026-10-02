@@ -24,7 +24,12 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
+	"github.com/asmsaifs/techo5-streamdeck/internal/update"
 )
+
+// version is stamped by the release build (-ldflags "-X main.version=v1.0.0"). A build from source
+// keeps "dev", which the update check never calls outdated.
+var version = "dev"
 
 // The editor UI, built by "npm run build" in frontend/. dist/ holds only a .gitkeep until then, so
 // the Go code still builds from a fresh checkout; the window is just empty.
@@ -138,6 +143,38 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 			login.SetChecked(on)
 		}
 	})
+	// The update check only finds a download; the user installs it. It runs once a day while the
+	// app lives and when the item is clicked.
+	var newer string
+	upd := menu.Add("Check for updates")
+	checkUpdate := func(manual bool) {
+		r, isNewer, err := update.Check(context.Background(), nil, update.LatestURL, update.ReleaseKey, version)
+		switch {
+		case err != nil:
+			slog.Warn("update check", "err", err)
+			if manual {
+				upd.SetLabel("Update check failed, try again")
+			}
+		case isNewer:
+			newer = r.Version
+			upd.SetLabel("Download " + r.Version)
+		default:
+			newer = ""
+			if manual {
+				upd.SetLabel("Up to date (" + version + ")")
+			}
+		}
+		menu.Update()
+	}
+	upd.OnClick(func(*application.Context) {
+		if newer != "" {
+			if err := app.Browser.OpenURL(update.PageURL); err != nil {
+				slog.Error("open the release page", "err", err)
+			}
+			return
+		}
+		go checkUpdate(true)
+	})
 	menu.AddSeparator()
 	menu.Add("Quit").OnClick(func(*application.Context) { app.Quit() })
 	tray.SetMenu(menu)
@@ -148,7 +185,15 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		}
 		// Off this goroutine: registering asks the main thread, which may be the one running us.
 		go c.OnReload(func(cfg *deck.Config) { hot.Sync(cfg.Hotkeys) })
-		slog.Info("started", "config", c.Store.Path(), "listening", c.Running())
+		if version != "dev" {
+			go func() {
+				for {
+					checkUpdate(false)
+					time.Sleep(24 * time.Hour)
+				}
+			}()
+		}
+		slog.Info("started", "version", version, "config", c.Store.Path(), "listening", c.Running())
 		if quit > 0 {
 			time.AfterFunc(quit, app.Quit)
 		}

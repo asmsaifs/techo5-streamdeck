@@ -8,6 +8,22 @@ The desktop app speaks the dashcast protocol, so a Show running TECHO5 needs no 
 the deck: set its *Dashboard server* to `<computer-ip>:9555` with the deck's key and set
 Dashboard to *Streamed*.
 
+## Install
+
+Download the installer for your computer from the
+[latest release](https://github.com/asmsaifs/techo5-streamdeck/releases/latest): a `.dmg` (macOS,
+universal), a `Setup.exe` (Windows) or an `.AppImage` / `.deb` (Linux). What each OS asks permission
+for is in [docs/permissions.md](docs/permissions.md).
+
+1. Start the app: it lives in the tray (menu bar). *Open editor* shows the button grid.
+2. Open the editor's Shows panel: it shows the address and key.
+3. On the Show: setup page → *Deck server* (or *Look for decks*), enter the key, then swipe in from
+   the left edge to open the deck.
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) from a `vX.Y.Z` tag; the
+local scripts are in `packaging/` (`macos/build.sh`, `windows/build.ps1`, `linux/build.sh`). The
+tray's *Check for updates* verifies a signature made with the release key (`cmd/relsign`).
+
 Status: early work. See [PLAN.md](PLAN.md) for the design and the progress list.
 
 ## Try the hello-world server

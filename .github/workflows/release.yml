@@ -1,0 +1,131 @@
+# Push a tag vX.Y.Z: builds the three installers, signs the checksums and publishes the release.
+#
+# Secrets (all optional except RELEASE_KEY; a missing one skips that signing step):
+#   RELEASE_KEY          base64 ed25519 seed (relsign keygen) for checksums.txt.sig, which the app's update check verifies
+#   MACOS_CERT_P12       base64 of the Developer ID Application .p12, MACOS_CERT_PASSWORD its password
+#   MACOS_SIGN_IDENTITY  "Developer ID Application: Name (TEAMID)"
+#   NOTARY_APPLE_ID, NOTARY_TEAM_ID, NOTARY_PASSWORD   notarytool credentials (app-specific password)
+#   WINDOWS_CERT_P12     base64 of a code-signing .pfx, WINDOWS_CERT_PASSWORD its password
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Signing keychain
+        if: env.MACOS_CERT_P12 != ''
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          rm cert.p12
+      - name: Notary profile
+        if: env.NOTARY_PASSWORD != ''
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials ci --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD"
+          echo "NOTARY_PROFILE=ci" >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+          CODESIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: packaging/macos/build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: mac, path: dist/*.dmg }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: choco install nsis -y --no-progress
+      - name: Certificate
+        if: env.WINDOWS_CERT_P12 != ''
+        env:
+          WINDOWS_CERT_P12: ${{ secrets.WINDOWS_CERT_P12 }}
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$PWD\cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERT_P12))
+          "WINDOWS_CERT=$PWD\cert.pfx" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Build
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $env:PATH += ";C:\Program Files (x86)\NSIS"
+          packaging\windows\build.ps1 -Version ("${{ github.ref_name }}" -replace '^v','')
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist/*.exe }
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libx11-dev libxtst-dev libxkbcommon-dev \
+            libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev libasound2-dev libfuse2
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/
+      - run: packaging/linux/build.sh
+        env:
+          VERSION: ${{ github.ref_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+
+  publish:
+    needs: [mac, windows, linux]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - uses: actions/download-artifact@v4
+        with: { path: assets, merge-multiple: true }
+      - name: Checksums and signature
+        env:
+          RELEASE_KEY: ${{ secrets.RELEASE_KEY }}
+        run: |
+          cd assets
+          go run ../cmd/relsign sums "${{ github.ref_name }}" * > checksums.txt
+          printf '%s' "$RELEASE_KEY" > ../release.key
+          go run ../cmd/relsign sign ../release.key checksums.txt
+          rm ../release.key
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" assets/* --title "${{ github.ref_name }}" --generate-notes

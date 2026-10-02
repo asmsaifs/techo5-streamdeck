@@ -1,0 +1,3 @@
+# Lets the logged-in user create virtual input devices, for the sources that need uinput.
+# The app does not use uinput today (clicks go through XTest); this is for later.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
