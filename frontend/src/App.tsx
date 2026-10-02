@@ -4,7 +4,7 @@ import { Palette, PaletteGhost } from "./Palette";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionForm, KeysInput } from "./ActionForm";
-import { errorText, hotkeyProblems, loadConfig, loadSchemas, preview, saveConfig, testAction } from "./api";
+import { errorText, hotkeyProblems, loadConfig, loadSchemas, preview, saveConfig, settings, testAction } from "./api";
 import { DevicesPanel } from "./DevicesPanel";
 import { IconPicker } from "./IconPicker";
 import { TileForm } from "./TileForm";
@@ -73,6 +73,12 @@ export function App() {
   }, [cfg, savedCfg, schemas, loadHkProblems]);
 
   const prof = cfg?.profiles[profile];
+
+  // The release this build is, next to the name; "dev" for a build from source.
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    settings().then((s) => setVersion(s.Version), () => {});
+  }, []);
   const pg = prof?.pages[page];
 
   // A page that was deleted or renamed away, or a profile switch, falls back to home.
@@ -114,6 +120,7 @@ export function App() {
         <div className="brand">
           <span className="logo" />
           Stream Deck
+          {version && <small className="hint" style={{ marginLeft: 8, fontWeight: 400 }}>{version}</small>}
         </div>
         <div className="profile">
           <select value={profile} title="Profile" onChange={(e) => (setProfile(e.target.value), setPage(m.HOME), setSel(null))}>
