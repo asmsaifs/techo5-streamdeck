@@ -13,11 +13,11 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
-	"github.com/wailsapp/wails/v3/pkg/icons"
 
 	"github.com/asmsaifs/techo5-streamdeck/internal/control"
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
@@ -36,6 +36,12 @@ var version = "dev"
 //
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// appIcon is the application icon, the file the installers are built from, so the tray shows the
+// same picture.
+//
+//go:embed packaging/icon.png
+var appIcon []byte
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "trigger" {
@@ -108,11 +114,8 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 	})
 
 	tray := app.SystemTray.New()
-	if runtime.GOOS == "darwin" {
-		tray.SetTemplateIcon(icons.SystrayMacTemplate)
-	} else {
-		tray.SetIcon(icons.SystrayLight)
-	}
+	// The tray shows the app's own icon, the one in the installers, not Wails' stock one.
+	tray.SetIcon(appIcon)
 	tray.OnClick(func() { showEditor(win) })
 
 	menu := app.NewMenu()
@@ -143,9 +146,14 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 			login.SetChecked(on)
 		}
 	})
-	// The update check only finds a download; the user installs it. It runs once a day while the
-	// app lives and when the item is clicked.
-	var newer string
+	// The update check finds a release; clicking installs it where the app can replace itself (an
+	// .app, an AppImage, the Windows installer run silently) and opens the release page elsewhere.
+	// It runs once a day while the app lives and when the item is clicked.
+	var (
+		rel        update.Release // the newer release, once one is found
+		canInstall = update.CanInstall()
+		installing atomic.Bool
+	)
 	upd := menu.Add("Check for updates")
 	checkUpdate := func(manual bool) {
 		r, isNewer, err := update.Check(context.Background(), nil, update.LatestURL, update.ReleaseKey, version)
@@ -156,24 +164,62 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 				upd.SetLabel("Update check failed, try again")
 			}
 		case isNewer:
-			newer = r.Version
-			upd.SetLabel("Download " + r.Version)
+			rel = r
+			if canInstall && update.AssetName(runtime.GOOS, runtime.GOARCH, r.Version) != "" {
+				upd.SetLabel("Install " + r.Version + " and restart")
+			} else {
+				canInstall = false
+				upd.SetLabel("Download " + r.Version)
+			}
 		default:
-			newer = ""
+			rel = update.Release{}
 			if manual {
 				upd.SetLabel("Up to date (" + version + ")")
 			}
 		}
 		menu.Update()
 	}
+	install := func() {
+		defer installing.Store(false)
+		upd.SetEnabled(false)
+		upd.SetLabel("Downloading " + rel.Version + "…")
+		menu.Update()
+		fail := func(err error) {
+			slog.Error("install the update", "err", err)
+			// Fall back to the page, where the user can install by hand.
+			canInstall = false
+			upd.SetEnabled(true)
+			upd.SetLabel("Install failed, download " + rel.Version)
+			menu.Update()
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		file, err := update.Download(ctx, nil, update.LatestURL, rel, update.AssetName(runtime.GOOS, runtime.GOARCH, rel.Version), "")
+		if err != nil {
+			fail(err)
+			return
+		}
+		upd.SetLabel("Installing " + rel.Version + "…")
+		menu.Update()
+		if err := update.Install(file, os.Args[1:]); err != nil {
+			fail(err)
+			return
+		}
+		app.Quit()
+	}
 	upd.OnClick(func(*application.Context) {
-		if newer != "" {
+		switch {
+		case rel.Version != "" && canInstall:
+			if installing.CompareAndSwap(false, true) {
+				go install()
+			}
+		case rel.Version != "":
 			if err := app.Browser.OpenURL(update.PageURL); err != nil {
 				slog.Error("open the release page", "err", err)
 			}
-			return
+		default:
+			go checkUpdate(true)
 		}
-		go checkUpdate(true)
 	})
 	menu.AddSeparator()
 	menu.Add("Quit").OnClick(func(*application.Context) { app.Quit() })
