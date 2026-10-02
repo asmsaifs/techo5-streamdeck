@@ -143,6 +143,7 @@ func (m *Manager) acquire(profile string) (*browser, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	reclaimProfile(dir)
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.ExecPath(path),
 		chromedp.UserDataDir(dir),
