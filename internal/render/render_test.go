@@ -179,7 +179,7 @@ func sample(t *testing.T, iconsDir string) (*deck.Profile, *deck.Page, State) {
 }
 
 func TestGoldens(t *testing.T) {
-	skipGoldensOnWindows(t)
+	skipGoldensOffMac(t)
 	dir := t.TempDir()
 	r := New(dir)
 	p, pg, st := sample(t, dir)
@@ -328,7 +328,7 @@ func golden(t *testing.T, name string, img *image.RGBA) {
 
 // A live tile's value is drawn big in place of the icon, over the label when there is one.
 func TestTileGolden(t *testing.T) {
-	skipGoldensOnWindows(t)
+	skipGoldensOffMac(t)
 	r := New(t.TempDir())
 	p := &deck.Profile{Grid: deck.DefaultGrid, Theme: deck.DefaultTheme}
 	pg := &deck.Page{Buttons: map[string]*deck.Button{
@@ -354,10 +354,11 @@ func TestTileGolden(t *testing.T) {
 	}
 }
 
-// The goldens are rasterised text, and Windows draws the same glyphs a few pixels differently.
-func skipGoldensOnWindows(t *testing.T) {
+// The goldens are rasterised text, and Windows and Linux draw the same glyphs a few pixels
+// differently.
+func skipGoldensOffMac(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("goldens are made on macOS; text rasterises differently on Windows")
+	if runtime.GOOS != "darwin" {
+		t.Skip("goldens are made on macOS; text rasterises differently elsewhere")
 	}
 }
