@@ -3,9 +3,12 @@ package update
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -91,5 +94,62 @@ func TestCheck(t *testing.T) {
 	}()
 	if _, _, err = Check(context.Background(), srv.Client(), srv.URL, otherPub, "v1.1.0"); err == nil {
 		t.Fatal("wrong key accepted")
+	}
+}
+
+func TestAssetName(t *testing.T) {
+	for _, c := range []struct{ os, arch, want string }{
+		{"darwin", "arm64", "TECHO5-Stream-Deck-v1.2.0.dmg"},
+		{"darwin", "amd64", "TECHO5-Stream-Deck-v1.2.0.dmg"},
+		{"windows", "amd64", "TECHO5-Stream-Deck-Setup-v1.2.0.exe"},
+		{"linux", "amd64", "TECHO5-Stream-Deck-v1.2.0-x86_64.AppImage"},
+		{"linux", "arm64", ""},
+		{"windows", "arm64", ""},
+	} {
+		if got := AssetName(c.os, c.arch, "v1.2.0"); got != c.want {
+			t.Errorf("AssetName(%s, %s) = %q, want %q", c.os, c.arch, got, c.want)
+		}
+	}
+}
+
+func TestDownload(t *testing.T) {
+	body := "installer bytes"
+	sum := sha256.Sum256([]byte(body))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/app.exe" {
+			w.Write([]byte(body))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	good := hex.EncodeToString(sum[:])
+	for _, c := range []struct {
+		name, file, sum string
+		ok              bool
+	}{
+		{"good", "app.exe", good, true},
+		{"tampered", "app.exe", strings.Repeat("0", 64), false},
+		{"not in the checksums", "other.exe", good, false},
+		{"path trick", "../app.exe", good, false},
+		{"missing on the server", "gone.exe", good, false},
+	} {
+		dir := t.TempDir()
+		r := Release{Version: "v1.2.0", Files: map[string]string{c.file: c.sum}}
+		if c.name == "not in the checksums" {
+			r.Files = map[string]string{"app.exe": good}
+		}
+		p, err := Download(context.Background(), srv.Client(), srv.URL, r, c.file, dir)
+		if (err == nil) != c.ok {
+			t.Errorf("%s: err = %v", c.name, err)
+			continue
+		}
+		if c.ok {
+			if b, _ := os.ReadFile(p); string(b) != body {
+				t.Errorf("%s: file holds %q", c.name, b)
+			}
+		} else if ents, _ := os.ReadDir(dir); len(ents) != 0 {
+			t.Errorf("%s: a refused download was left in %s", c.name, dir)
+		}
 	}
 }

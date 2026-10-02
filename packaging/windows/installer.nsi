@@ -13,7 +13,8 @@ Name "TECHO5 Stream Deck"
 OutFile "..\..\dist\TECHO5-Stream-Deck-Setup-v${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\TECHO5 Stream Deck"
 ; Per user: no administrator needed. The firewall rule is the one step that does, so it is asked for
-; at the end and skipped when declined (Windows then asks on first start instead).
+; at the end and skipped when declined (Windows then asks on first start instead) and when the
+; installer runs silently (/S, as the app's own update does): the rule from the first install stays.
 RequestExecutionLevel user
 Icon "..\icon.ico"
 UninstallIcon "..\icon.ico"
@@ -35,7 +36,7 @@ Section "Install"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\TECHO5StreamDeck" "UninstallString" '"$INSTDIR\uninstall.exe"'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\TECHO5StreamDeck" "DisplayIcon" "$INSTDIR\techo5-streamdeck.exe"
   ; Inbound rule for the program on private networks, any port: the listen port is a setting.
-  MessageBox MB_YESNO "Let your Echo Show reach the app through the Windows firewall (needs administrator approval)?" IDNO nofw
+  MessageBox MB_YESNO "Let your Echo Show reach the app through the Windows firewall (needs administrator approval)?" /SD IDNO IDNO nofw
   ExecShell "runas" "netsh" 'advfirewall firewall add rule name="TECHO5 Stream Deck" dir=in action=allow program="$INSTDIR\techo5-streamdeck.exe" profile=private enable=yes' SW_HIDE
   nofw:
 SectionEnd

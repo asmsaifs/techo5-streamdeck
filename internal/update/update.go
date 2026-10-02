@@ -1,7 +1,8 @@
 // Package update is the app's check for a newer release. Releases carry a checksums.txt and a
 // detached ed25519 signature of it (checksums.txt.sig), the same idea as the techo5 updater: the
 // app believes a version only when the release key signed the file that names it. The check only
-// tells the user a download exists; nothing is installed from here.
+// finds a download; Download fetches it and checks it against those checksums, and Install (one
+// file per OS) swaps it in for the running app.
 package update
 
 import (
@@ -9,11 +10,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -165,4 +170,90 @@ func get(ctx context.Context, client *http.Client, url string) ([]byte, error) {
 		return nil, fmt.Errorf("update: %s: %s", url, resp.Status)
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+}
+
+// maxAsset bounds a download: an installer is tens of megabytes, so more than this is a mistake or
+// an attack.
+const maxAsset = 512 << 20
+
+// AssetName is the release file that updates an app running on goos/goarch, or "" when no release
+// file does (an arch the build workflow does not make). The names are the ones packaging/ writes.
+func AssetName(goos, goarch, version string) string {
+	switch {
+	case goos == "darwin": // universal
+		return "TECHO5-Stream-Deck-" + version + ".dmg"
+	case goos == "windows" && goarch == "amd64":
+		return "TECHO5-Stream-Deck-Setup-" + version + ".exe"
+	case goos == "linux" && goarch == "amd64":
+		return "TECHO5-Stream-Deck-" + version + "-x86_64.AppImage"
+	}
+	return ""
+}
+
+// Download fetches the release file name from base into dir (a new temporary folder when dir is
+// empty) and returns its path. The file is kept only if its sha256 is the one the signed
+// checksums name for it: r came from Check, so the release key vouches for that sum.
+func Download(ctx context.Context, client *http.Client, base string, r Release, name, dir string) (string, error) {
+	want, ok := r.Files[name]
+	if !ok || name == "" || filepath.Base(name) != name {
+		return "", fmt.Errorf("update: release %s has no file %q", r.Version, name)
+	}
+	if client == nil {
+		client = &http.Client{} // no overall timeout: the context bounds a slow download
+	}
+	if dir == "" {
+		var err error
+		if dir, err = os.MkdirTemp("", "techo5-update"); err != nil {
+			return "", err
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/"+name, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("update: %s: %s", name, resp.Status)
+	}
+	path := filepath.Join(dir, name)
+	f, err := os.Create(path)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, maxAsset+1))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	switch {
+	case err != nil:
+	case n > maxAsset:
+		err = errors.New("update: the download is larger than any release file")
+	case hex.EncodeToString(h.Sum(nil)) != want:
+		err = fmt.Errorf("update: %s does not match the signed checksum", name)
+	}
+	if err != nil {
+		os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
+// ErrUnsupported means this install cannot replace itself (a .deb, an app in a folder the user
+// cannot write, a program run from source); the caller sends the user to the release page.
+var ErrUnsupported = errors.New("update: this install cannot update itself")
+
+// writable reports whether files can be made in dir, which is what swapping an app there needs.
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".techo5-write-")
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(f.Name())
+	return true
 }
