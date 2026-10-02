@@ -329,8 +329,21 @@ func TestPullDownRefreshesThePage(t *testing.T) {
 	// A short pull is not a refresh: the page stays blue (it has the button's click undone only
 	// by a reload).
 	drag(100, 200)
-	time.Sleep(time.Second)
-	settled(t, s, "the page still blue", func(img *image.RGBA) bool { return near(img, 800, 400, 0, 0, 255) })
+	// A page that stands still sends no frames, so what is checked is that no red one comes.
+	for quiet := time.After(3 * time.Second); ; {
+		select {
+		case img, open := <-s.Frames():
+			if !open {
+				t.Fatalf("source stopped: %v", s.Err())
+			}
+			if near(img, 800, 400, 255, 0, 0) {
+				t.Fatal("a short pull loaded the page again")
+			}
+			continue
+		case <-quiet:
+		}
+		break
+	}
 
 	drag(50, 300)
 	settled(t, s, "the page loaded again", func(img *image.RGBA) bool { return near(img, 800, 400, 255, 0, 0) })
