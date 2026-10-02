@@ -38,6 +38,7 @@ export interface Settings {
   Listen: string;
   Key: string;
   Running: boolean;
+  Version: string;
   Address: string;
 }
 export interface Device {

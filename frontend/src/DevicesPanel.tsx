@@ -64,6 +64,7 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="row">
           <h3 style={{ margin: 0 }}>Shows</h3>
+          {set && <small className="hint">TECHO5 Stream Deck {set.Version}</small>}
           <span className="spacer" />
           <button onClick={p.onClose}>Close</button>
         </div>

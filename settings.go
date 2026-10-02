@@ -18,6 +18,7 @@ type Settings struct {
 	Listen  string // as configured, "0.0.0.0:9555"
 	Key     string
 	Running bool
+	Version string // the release this build was stamped with, "dev" from source
 	Address string // for the Show's "Dashboard server" field: this computer's LAN IP and the port
 }
 
@@ -31,7 +32,7 @@ func (e *Editor) Settings() Settings {
 	if err != nil {
 		port = strconv.Itoa(9555)
 	}
-	return Settings{Listen: c.Server.Listen, Key: c.Server.Key, Running: e.core.Running(),
+	return Settings{Listen: c.Server.Listen, Key: c.Server.Key, Running: e.core.Running(), Version: version,
 		Address: net.JoinHostPort(core.LANIP(), port)}
 }
 
