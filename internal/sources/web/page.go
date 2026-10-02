@@ -89,7 +89,8 @@ func (f *finger) replay(ctx context.Context, t wire.Touch) error {
 		return input.DispatchMouseEvent(input.MouseWheel, float64(p.X), float64(p.Y)).
 			WithDeltaX(float64(d.X)).WithDeltaY(float64(d.Y)).Do(ctx)
 	case "up":
-		pulled := f.down && f.top && f.at.Y-f.start.Y >= pullDistance
+		// The lift's own position counts too: a busy page drops moves, but never the lift.
+		pulled := f.down && f.top && max(f.at.Y, p.Y)-f.start.Y >= pullDistance
 		f.down = false
 		if pulled {
 			slog.Info("pull to refresh")

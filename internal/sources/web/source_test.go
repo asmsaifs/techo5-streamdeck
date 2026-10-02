@@ -322,6 +322,7 @@ func TestPullDownRefreshesThePage(t *testing.T) {
 		s.Touch(wire.Touch{T: "down", X: 500, Y: from})
 		for y := from; y <= to; y += 20 {
 			s.Touch(wire.Touch{T: "move", X: 500, Y: y})
+			time.Sleep(20 * time.Millisecond) // a finger is not instant, and a busy page drops moves
 		}
 		s.Touch(wire.Touch{T: "up", X: 500, Y: to})
 	}
