@@ -33,12 +33,12 @@ jobs:
           npm ci
           npm test
           npm run build
-      - run: go vet ./...
+      - run: go vet -tags gtk3 ./...
       # The display tests of the editor need a screen on Linux.
       - name: Go tests
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a go test ./...; else go test ./...; fi
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a go test -tags gtk3 ./...; else go test ./...; fi
 
   helpers:
     runs-on: macos-14

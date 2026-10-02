@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -103,6 +104,10 @@ func TestControlCommandsPerOS(t *testing.T) {
 			}
 			if err := r.env(tt.goos).do(context.Background(), tt.c); err != nil {
 				t.Fatal(err)
+			}
+			// Paths are joined with the host's separator; the table is written with slashes.
+			for i, l := range r.lines {
+				r.lines[i] = filepath.ToSlash(l)
 			}
 			if !reflect.DeepEqual(r.lines, tt.want) {
 				t.Errorf("ran\n  %s\nwant\n  %s", strings.Join(r.lines, "\n  "), strings.Join(tt.want, "\n  "))

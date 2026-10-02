@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -189,6 +190,9 @@ func TestMotionGoesHalfThenSharpens(t *testing.T) {
 
 // While the screen keeps moving the full-size pictures keep waiting.
 func TestSharpenWaitsForTheLastMovingFrame(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleeps are about 15 ms coarse on Windows, which the timing here cannot take")
+	}
 	e, s := newEnc()
 	defer e.Close()
 	e.Send(frame(960, 480, 40))

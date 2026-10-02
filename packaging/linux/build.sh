@@ -12,7 +12,7 @@ mkdir -p $ROOT/usr/bin $ROOT/usr/share/applications $ROOT/usr/share/icons/hicolo
 	$ROOT/lib/udev/rules.d $ROOT/DEBIAN
 
 (cd frontend && npm ci && npm run build)
-CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+CGO_ENABLED=1 go build -trimpath -tags gtk3 -ldflags "-s -w -X main.version=$VERSION" \
 	-o $ROOT/usr/bin/techo5-streamdeck .
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o $ROOT/usr/bin/deckcap-linux ./cmd/deckcap-linux
 cp packaging/linux/techo5-streamdeck.desktop $ROOT/usr/share/applications/

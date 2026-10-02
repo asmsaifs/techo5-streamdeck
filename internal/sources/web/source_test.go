@@ -6,6 +6,7 @@ import (
 	"image"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,8 +21,22 @@ func browserOrSkip(t *testing.T) *Manager {
 	if _, err := FindChrome(""); err != nil {
 		t.Skip(err)
 	}
-	m := NewManager(t.TempDir())
-	t.Cleanup(m.Close)
+	// Not t.TempDir: the browser's processes may still be writing to its profile when the manager
+	// has closed, and a failed cleanup would fail a test that passed. Retry, then give up quietly.
+	dir, err := os.MkdirTemp("", "web-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager(dir)
+	t.Cleanup(func() {
+		m.Close()
+		for i := 0; i < 20; i++ {
+			if os.RemoveAll(dir) == nil {
+				return
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	})
 	return m
 }
 

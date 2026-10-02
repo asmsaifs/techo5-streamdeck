@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -178,6 +179,7 @@ func sample(t *testing.T, iconsDir string) (*deck.Profile, *deck.Page, State) {
 }
 
 func TestGoldens(t *testing.T) {
+	skipGoldensOnWindows(t)
 	dir := t.TempDir()
 	r := New(dir)
 	p, pg, st := sample(t, dir)
@@ -326,6 +328,7 @@ func golden(t *testing.T, name string, img *image.RGBA) {
 
 // A live tile's value is drawn big in place of the icon, over the label when there is one.
 func TestTileGolden(t *testing.T) {
+	skipGoldensOnWindows(t)
 	r := New(t.TempDir())
 	p := &deck.Profile{Grid: deck.DefaultGrid, Theme: deck.DefaultTheme}
 	pg := &deck.Page{Buttons: map[string]*deck.Button{
@@ -348,5 +351,13 @@ func TestTileGolden(t *testing.T) {
 	without := r.Cell(p, pg.Buttons["0,0"], deck.Cell{}, image.Pt(960, 480), CellState{})
 	if bytes.Equal(with.Pix, without.Pix) {
 		t.Error("Text changed nothing")
+	}
+}
+
+// The goldens are rasterised text, and Windows draws the same glyphs a few pixels differently.
+func skipGoldensOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("goldens are made on macOS; text rasterises differently on Windows")
 	}
 }

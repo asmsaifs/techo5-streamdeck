@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,9 @@ func TestCacheReadsOncePerIntervalForAllAskers(t *testing.T) {
 func TestOSOutput(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("no sh")
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows runner's sh is not the shell the tile runs commands with")
 	}
 	e := OSEnv(nil)
 	out, err := e.Output(context.Background(), "echo hi; echo err >&2", nil, true)
