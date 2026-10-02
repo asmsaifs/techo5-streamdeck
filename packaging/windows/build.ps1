@@ -16,7 +16,7 @@ if ($env:WINDOWS_CERT) {
     signtool sign /f $env:WINDOWS_CERT /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $f
   }
 }
-makensis "-DVERSION=$Version" -DSRC=dist/win packaging\windows\installer.nsi
+makensis "-DVERSION=$Version" "-DSRC=$PWD\dist\win" packaging\windows\installer.nsi
 if ($env:WINDOWS_CERT) {
   signtool sign /f $env:WINDOWS_CERT /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\TECHO5-Stream-Deck-Setup-v$Version.exe"
 }
