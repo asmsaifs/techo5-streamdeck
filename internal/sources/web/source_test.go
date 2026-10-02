@@ -295,3 +295,78 @@ func TestParkedPagesAreLimitedAndExpire(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+func TestPullDownRefreshesThePage(t *testing.T) {
+	m := browserOrSkip(t)
+	other := httptest.NewServer(http.NotFoundHandler())
+	defer other.Close()
+	srv := site(t, other.URL)
+	defer srv.Close()
+
+	s, err := m.New(Spec{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx, image.Pt(960, 480)); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	settled(t, s, "the page", func(img *image.RGBA) bool { return near(img, 100, 100, 0, 255, 0) })
+	s.Touch(wire.Touch{T: "tap", X: 100, Y: 100})
+	settled(t, s, "the page turned blue", func(img *image.RGBA) bool { return near(img, 800, 400, 0, 0, 255) })
+
+	drag := func(from, to int) {
+		s.Touch(wire.Touch{T: "down", X: 500, Y: from})
+		for y := from; y <= to; y += 20 {
+			s.Touch(wire.Touch{T: "move", X: 500, Y: y})
+		}
+		s.Touch(wire.Touch{T: "up", X: 500, Y: to})
+	}
+	// A short pull is not a refresh: the page stays blue (it has the button's click undone only
+	// by a reload).
+	drag(100, 200)
+	time.Sleep(time.Second)
+	settled(t, s, "the page still blue", func(img *image.RGBA) bool { return near(img, 800, 400, 0, 0, 255) })
+
+	drag(50, 300)
+	settled(t, s, "the page loaded again", func(img *image.RGBA) bool { return near(img, 800, 400, 255, 0, 0) })
+}
+
+func TestBackTabGoesBackAndIsNotThePagesTouch(t *testing.T) {
+	m := browserOrSkip(t)
+	other := httptest.NewServer(http.NotFoundHandler())
+	defer other.Close()
+	srv := site(t, other.URL)
+	defer srv.Close()
+
+	s, err := m.New(Spec{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := s.Start(ctx, image.Pt(960, 480)); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	first := settled(t, s, "the page", func(img *image.RGBA) bool { return near(img, 100, 100, 0, 255, 0) })
+	if near(first, 24, 240, 255, 0, 0) {
+		t.Error("the back tab is not drawn")
+	}
+	if err := s.navigate(srv.URL + "/there"); err != nil {
+		t.Fatal(err)
+	}
+	settled(t, s, "the second page", func(img *image.RGBA) bool { return near(img, 800, 400, 0, 0, 0) })
+	s.Touch(wire.Touch{T: "tap", X: 24, Y: 240})
+	settled(t, s, "the first page again", func(img *image.RGBA) bool { return near(img, 100, 100, 0, 255, 0) })
+
+	// On the first page there is nothing to go back to: the page must stay, not go blank.
+	s.Touch(wire.Touch{T: "tap", X: 24, Y: 240})
+	time.Sleep(2 * time.Second)
+	s.Touch(wire.Touch{T: "tap", X: 100, Y: 100})
+	settled(t, s, "the first page still there", func(img *image.RGBA) bool { return near(img, 800, 400, 0, 0, 255) })
+}

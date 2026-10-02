@@ -147,6 +147,7 @@ func (s *Source) Close() error {
 }
 
 func (s *Source) fail(err error) {
+	s.log.Warn("the page failed", "profile", s.profile, "err", err)
 	s.fmu.Lock()
 	if s.err == nil && s.ctx.Err() == nil {
 		s.err = err
@@ -166,6 +167,7 @@ func (s *Source) finish() {
 
 // push replaces the frame nobody has taken yet.
 func (s *Source) push(img *image.RGBA) {
+	drawBack(img)
 	s.fmu.Lock()
 	defer s.fmu.Unlock()
 	if s.closed {
@@ -253,8 +255,26 @@ func (s *Source) run() {
 		case <-s.ctx.Done():
 			return
 		case ev := <-s.touches:
+			// The back tab is the deck's own, not the page's: a press on it never reaches the page.
+			if p := image.Pt(ev.X, ev.Y); p.In(backRect(s.size)) {
+				if ev.T == "tap" {
+					s.log.Info("back")
+					if err := chromedp.Run(rc, chromedp.ActionFunc(goBack)); err != nil && s.ctx.Err() == nil {
+						s.log.Warn("back", "err", err)
+					}
+				}
+				continue
+			}
 			if err := chromedp.Run(rc, chromedp.ActionFunc(func(ctx context.Context) error { return f.replay(ctx, ev) })); err != nil && s.ctx.Err() == nil {
 				s.log.Warn("touch", "err", err)
+			}
+			if f.refreshed {
+				f.refreshed = false
+				// A page that had stood still is asked for frames only rarely, so the reloaded one
+				// is sent from here instead of waiting for Chrome's next frame.
+				for _, after := range []time.Duration{500 * time.Millisecond, 2 * time.Second} {
+					time.AfterFunc(after, func() { s.snapshot(rc) })
+				}
 			}
 		}
 	}

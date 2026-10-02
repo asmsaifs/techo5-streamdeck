@@ -40,6 +40,13 @@ Edge, Brave or Chromium installed (`TECHO5_CHROME` names one if none is found).
 
 - **Touch**: a tap is a click, a drag scrolls (the page follows the finger). Sliders cannot be
   dragged, only tapped. The page is the size of the Show's screen, so it lays out as a desktop site.
+- **Back**: a small "‹" tab on the left edge, half way down, goes back one page in the site's
+  history when tapped (the tap does not reach the page).
+- **Refresh**: pulling down from the top of the page (a drag of 200 px or more that starts with the
+  page scrolled to its top) loads the page again. It is the way out of a page that has stuck, such
+  as a paused video or a half drawn layout.
+- **Log**: the app writes `deck.log` in the config folder (`deck.log.1` is the one before it).
+  Page errors are there, as `the page failed` and `sound` lines.
 - **Leaving**: a "Deck" chip shows in the top left corner for 3 seconds when the page opens and
   again after a tap within 40 px of the top edge (that tap reaches the page too). A tap on the chip
   closes the page and returns to the deck. Swiping in from the left edge leaves the stream

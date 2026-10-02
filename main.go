@@ -23,6 +23,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/core"
 	"github.com/asmsaifs/techo5-streamdeck/internal/deck"
 	"github.com/asmsaifs/techo5-streamdeck/internal/hotkeys"
+	"github.com/asmsaifs/techo5-streamdeck/internal/logfile"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 	"github.com/asmsaifs/techo5-streamdeck/internal/update"
 )
@@ -60,6 +61,19 @@ func main() {
 }
 
 func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
+	// The log goes to a file in the config folder: the app has no terminal to print to. A log
+	// that cannot be opened must not stop the deck, so it stays on stderr.
+	logDir := dir
+	if logDir == "" {
+		logDir, _ = store.Dir()
+	}
+	if w, closer, err := logfile.Open(logDir); err != nil {
+		slog.Warn("the log file could not be opened", "err", err)
+	} else {
+		defer closer.Close()
+		slog.SetDefault(slog.New(slog.NewTextHandler(w, nil)))
+		log.SetOutput(w)
+	}
 	ui, err := fs.Sub(assets, "frontend/dist")
 	if err != nil {
 		return err
