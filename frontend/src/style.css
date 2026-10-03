@@ -131,6 +131,11 @@ small.bad { color: #ff8b8f; }
 /* dialogs */
 .modal { position: fixed; inset: 0; background: #000b; display: flex; align-items: center; justify-content: center; z-index: 10; backdrop-filter: blur(3px); }
 .dialog { background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px; padding: 18px; width: min(760px, 92vw); max-height: 86vh; overflow: auto; box-shadow: 0 30px 80px #000c; }
+.modal.ask { z-index: 20; }
+.dialog.small { width: min(420px, 92vw); }
+.asktext { margin: 0 0 12px; white-space: pre-wrap; }
+.dialog.small input { width: 100%; margin-bottom: 14px; }
+.row.end { justify-content: flex-end; }
 .icons { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .icons button { width: 46px; height: 46px; padding: 0; }
 .icons button.on { border-color: var(--accent); background: #5b8def33; }

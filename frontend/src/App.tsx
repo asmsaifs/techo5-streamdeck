@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionForm, KeysInput } from "./ActionForm";
 import { errorText, hotkeyProblems, loadConfig, loadSchemas, preview, saveConfig, settings, testAction } from "./api";
 import { DevicesPanel } from "./DevicesPanel";
+import { ask, confirm } from "./Dialog";
 import { IconPicker } from "./IconPicker";
 import { TileForm } from "./TileForm";
 import { cellRects } from "./layout";
@@ -61,7 +62,7 @@ export function App() {
     if (bad) return setMsg({ kind: "err", text: bad });
     // A run button can do anything the user can; show the exact lines before they are first saved.
     const cmds = savedCfg ? m.newRunCommands(savedCfg, cfg) : [];
-    if (cmds.length && !window.confirm(`These commands will run on this computer when their buttons are pressed:\n\n${cmds.join("\n")}\n\nSave?`)) return;
+    if (cmds.length && !(await confirm(`These commands will run on this computer when their buttons are pressed:\n\n${cmds.join("\n")}\n\nSave?`, "Save"))) return;
     try {
       await saveConfig(cfg);
       setSaved(cfg);
@@ -131,9 +132,9 @@ export function App() {
           <button
             className="ghost icon"
             title="New profile (a copy of this one)"
-            onClick={() => {
-              const n = window.prompt(`New profile (a copy of "${profile}")`)?.trim();
-              if (n === undefined || n === null) return;
+            onClick={async () => {
+              const n = await ask(`New profile (a copy of "${profile}")`);
+              if (n === null) return;
               const why = m.profileNameProblem(cfg, n);
               if (why) return setMsg({ kind: "err", text: why });
               edit(m.addProfile(cfg, n, profile));
@@ -146,10 +147,10 @@ export function App() {
           <button
             className="ghost icon"
             title="Delete this profile"
-            onClick={() => {
+            onClick={async () => {
               const why = m.profileDeleteBlocker(cfg, profile);
               if (why) return setMsg({ kind: "err", text: why });
-              if (!window.confirm(`Delete profile "${profile}"?`)) return;
+              if (!(await confirm(`Delete profile "${profile}"?`, "Delete"))) return;
               edit(m.deleteProfile(cfg, profile));
               setProfile("default");
               setPage(m.HOME);
@@ -206,7 +207,6 @@ function Pages(p: {
   schemas: Schemas;
 }) {
   const prof = p.cfg.profiles[p.profile];
-  const ask = (q: string, def = "") => window.prompt(q, def)?.trim() ?? null;
   const refuse = (text: string | null) => (text ? (p.say({ kind: "err", text }), true) : false);
   return (
     <nav>
@@ -216,8 +216,8 @@ function Pages(p: {
           <button
             className="ghost icon"
             title="Add a page"
-            onClick={() => {
-              const n = ask("New page name");
+            onClick={async () => {
+              const n = await ask("New page name");
               if (n !== null && !refuse(m.pageNameProblem(prof, n))) {
                 p.edit(m.addPage(p.cfg, p.profile, n));
                 p.setPage(n);
@@ -230,8 +230,8 @@ function Pages(p: {
             className="ghost icon"
             title="Rename this page"
             disabled={p.page === m.HOME}
-            onClick={() => {
-              const n = ask("Rename page to", p.page);
+            onClick={async () => {
+              const n = await ask("Rename page to", p.page);
               if (n !== null && n !== p.page && !refuse(m.pageNameProblem(prof, n))) {
                 p.edit(m.renamePage(p.cfg, p.profile, p.page, n));
                 p.setPage(n);
@@ -244,8 +244,8 @@ function Pages(p: {
             className="ghost icon"
             title="Delete this page"
             disabled={p.page === m.HOME}
-            onClick={() => {
-              if (!refuse(m.deleteBlocker(prof, p.page)) && window.confirm(`Delete page "${p.page}"?`)) {
+            onClick={async () => {
+              if (!refuse(m.deleteBlocker(prof, p.page)) && (await confirm(`Delete page "${p.page}"?`, "Delete"))) {
                 p.edit(m.deletePage(p.cfg, p.profile, p.page));
                 p.setPage(m.HOME);
               }

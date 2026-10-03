@@ -3,6 +3,7 @@ import type { Browser, Device, Settings } from "./api";
 import { browsers, devices, errorText, regenerateKey, setListen, settings } from "./api";
 import { frontApp, secretStatus, setSecret } from "./api";
 import type { SecretStatus } from "./api";
+import { confirm } from "./Dialog";
 import * as m from "./model";
 
 type Say = (x: { kind: "err" | "ok"; text: string } | null) => void;
@@ -150,8 +151,8 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
                 <input style={{ flex: 1 }} readOnly value={showKey ? set.Key : "•".repeat(16)} />
                 <button onClick={() => setShowKey(!showKey)}>{showKey ? "Hide" : "Show"}</button>
                 <button
-                  onClick={() => {
-                    if (!window.confirm("Make a new key? Every Show will be disconnected until it is given the new one.")) return;
+                  onClick={async () => {
+                    if (!(await confirm("Make a new key? Every Show will be disconnected until it is given the new one.", "New key"))) return;
                     regenerateKey()
                       .then(() => (p.say({ kind: "ok", text: "New key made. Enter it on each Show." }), loadSettings()))
                       .catch((e) => p.say({ kind: "err", text: errorText(e) }));
