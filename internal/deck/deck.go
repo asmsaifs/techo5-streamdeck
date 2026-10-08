@@ -117,6 +117,17 @@ const (
 	TileScript = "script"   // the first line a command prints
 	TileState  = "state"    // no text: a command says whether the button's toggle is really on
 	TileMute   = "mute"     // no text: whether the sound (Command "volume.mute") or the microphone ("mic.mute") is muted
+
+	// The processor's and the graphics card's temperature; Format "f" shows Fahrenheit.
+	TileCPUTemp = "cpu_temp"
+	TileGPUTemp = "gpu_temp"
+	TileGPU     = "gpu" // graphics load, in percent
+	// What the computer receives and sends over the network, and reads from and writes to its
+	// disks, per second; Format "bits" shows network speeds in bits.
+	TileNetDown   = "net_down"
+	TileNetUp     = "net_up"
+	TileDiskRead  = "disk_read"
+	TileDiskWrite = "disk_write"
 )
 
 // ImplicitTile is the tile a button gets without having one: a mute button with an icon for the
@@ -135,7 +146,7 @@ func (b *Button) ImplicitTile() *Tile {
 type Tile struct {
 	Type    string   `json:"type"`
 	Every   float64  `json:"every,omitempty"`   // seconds between readings; each type has a default
-	Format  string   `json:"format,omitempty"`  // clock: 24h (default), 12h, 24h-seconds, date
+	Format  string   `json:"format,omitempty"`  // clock: 24h (default), 12h, 24h-seconds, date; temperatures: c (default), f; net: bytes (default), bits
 	Entity  string   `json:"entity,omitempty"`  // ha_state: "sensor.living_room_temperature"
 	Command string   `json:"command,omitempty"` // script and state
 	Args    []string `json:"args,omitempty"`

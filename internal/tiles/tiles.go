@@ -1,5 +1,5 @@
-// Package tiles reads the values live buttons show: the time, processor and memory load, a Home
-// Assistant entity, what a command prints. Readings are cached by what is read, so a script that
+// Package tiles reads the values live buttons show: the time, processor, graphics and memory load,
+// temperatures, network and disk speeds, a Home Assistant entity, what a command prints. Readings are cached by what is read, so a script that
 // two Shows both display runs once per interval, not once per Show.
 package tiles
 
@@ -33,6 +33,11 @@ type Env struct {
 	Now func() time.Time
 	CPU func(ctx context.Context) (float64, error) // percent
 	RAM func(ctx context.Context) (float64, error) // percent
+	// Temp is the processor's ("cpu") or the graphics card's ("gpu") temperature in °C.
+	Temp func(ctx context.Context, part string) (float64, error)
+	GPU  func(ctx context.Context) (float64, error) // percent
+	// Rate is bytes per second for a net_down, net_up, disk_read or disk_write tile.
+	Rate func(ctx context.Context, kind string) (float64, error)
 	// HA is a Home Assistant entity's state, with its unit when it has one.
 	HA func(ctx context.Context, entity string) (string, error)
 	// Muted says whether the sound ("volume.mute") or the microphone ("mic.mute") is muted.
@@ -65,6 +70,9 @@ func OSEnv(ha func(ctx context.Context, entity string) (string, error)) Env {
 			}
 			return v.UsedPercent, nil
 		},
+		Temp:   temperature,
+		GPU:    gpuLoad,
+		Rate:   rate,
 		HA:     ha,
 		Output: osOutput,
 	}
@@ -89,7 +97,7 @@ func Every(t *deck.Tile) time.Duration {
 	switch t.Type {
 	case deck.TileClock:
 		return time.Second
-	case deck.TileCPU:
+	case deck.TileCPU, deck.TileGPU, deck.TileNetDown, deck.TileNetUp, deck.TileDiskRead, deck.TileDiskWrite:
 		return 2 * time.Second
 	case deck.TileScript:
 		return 10 * time.Second
@@ -114,6 +122,26 @@ func Read(ctx context.Context, e Env, t *deck.Tile) Value {
 		return percent(e.CPU(ctx))
 	case deck.TileRAM:
 		return percent(e.RAM(ctx))
+	case deck.TileGPU:
+		return percent(e.GPU(ctx))
+	case deck.TileCPUTemp, deck.TileGPUTemp:
+		c, err := e.Temp(ctx, strings.TrimSuffix(t.Type, "_temp"))
+		if err != nil {
+			return Value{Err: err}
+		}
+		if t.Format == "f" {
+			return Value{Text: fmt.Sprintf("%.0f°F", c*9/5+32)}
+		}
+		return Value{Text: fmt.Sprintf("%.0f°C", c)}
+	case deck.TileNetDown, deck.TileNetUp, deck.TileDiskRead, deck.TileDiskWrite:
+		v, err := e.Rate(ctx, t.Type)
+		if err != nil {
+			return Value{Err: err}
+		}
+		if t.Format == "bits" && (t.Type == deck.TileNetDown || t.Type == deck.TileNetUp) {
+			return Value{Text: speed(v*8, "bit/s")}
+		}
+		return Value{Text: speed(v, "B/s")}
 	case deck.TileHA:
 		s, err := e.HA(ctx, t.Entity)
 		return Value{Text: oneLine(s), Err: err}
@@ -155,6 +183,21 @@ func percent(v float64, err error) Value {
 		return Value{Err: err}
 	}
 	return Value{Text: fmt.Sprintf("%.0f%%", v)}
+}
+
+// speed is a per-second amount in decimal units, as network speeds are given, with two or three
+// figures so it fits a button: "0 B/s", "850 kB/s", "1.2 MB/s", "12 Mbit/s".
+func speed(v float64, unit string) string {
+	prefixes := []string{"", "k", "M", "G", "T"}
+	i := 0
+	for v >= 999.5 && i < len(prefixes)-1 {
+		v /= 1000
+		i++
+	}
+	if i > 0 && v < 9.95 {
+		return fmt.Sprintf("%.1f %s%s", v, prefixes[i], unit)
+	}
+	return fmt.Sprintf("%.0f %s%s", v, prefixes[i], unit)
 }
 
 func ptr(b bool) *bool { return &b }

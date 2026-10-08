@@ -132,6 +132,10 @@ can still have an action.
 |---|---|---|
 | `clock` | the time; `format` is `24h`, `12h`, `24h-seconds` or `date` | 1 s |
 | `cpu`, `ram` | load and memory in use, in percent | 2 s, 5 s |
+| `gpu` | graphics load, in percent: NVIDIA cards with `nvidia-smi`, Macs from the I/O registry, AMD on Linux from sysfs, other Windows cards from the 3D engine's counters (English Windows only) | 2 s |
+| `cpu_temp`, `gpu_temp` | the processor's and the graphics card's temperature; `format` `c` (default) or `f`. From the system's sensors, and `nvidia-smi` for an NVIDIA card. Apple silicon has no graphics sensor of its own, so `gpu_temp` there is the chip's die, like `cpu_temp`. Windows often reports no processor temperature without admin rights, and the tile then says so | 5 s |
+| `net_down`, `net_up` | received and sent per second, over all network cards but the loopback, VPN tunnels, and container and virtual machine networks (whose traffic the real card carries too); `format` `bytes` (default, "1.2 MB/s") or `bits` ("9.9 Mbit/s") | 2 s |
+| `disk_read`, `disk_write` | read from and written to the disks per second (on Linux whole disks only, so a partition is not counted twice) | 2 s |
 | `ha_state` | a Home Assistant `entity`'s state with its unit ("21.5 °C"); address and token as for `ha.service` | 5 s |
 | `script` | the first line `command` (with `args`, or a `shell` line) prints, cut to 60 characters | 10 s |
 | `state` | nothing: whether the command says the button's toggle is really on (exit 0 and not "no", "false", "off" or "0") | 5 s |
@@ -142,7 +146,9 @@ be read shows "—" and the reason is in the log once. A `state` tile makes a `t
 from what is true, which fixes the "out of step" caveat of toggles. Home Assistant is polled, not
 subscribed to. With `-dry-run`, script and state tiles do not run their command.
 
-Checked for real: clock, cpu, ram, script and state tiles over the wire to the fake Show. Home
+Checked for real: clock, cpu, ram, script and state tiles over the wire to the fake Show. The
+temperature, gpu, network and disk tiles read real values on an Apple silicon Mac; on Windows and
+Linux only their parsing is tested. Home
 Assistant tiles only against a fake server.
 
 ## Profile by application (auto-switch)

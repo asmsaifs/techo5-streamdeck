@@ -34,6 +34,24 @@ export function TileForm(p: { tile?: m.Tile; onChange: (t: m.Tile | null) => voi
           </select>
         </label>
       )}
+      {(t?.type === "cpu_temp" || t?.type === "gpu_temp") && (
+        <label>
+          Unit
+          <select value={t.format ?? "c"} onChange={(e) => set({ format: e.target.value === "c" ? undefined : e.target.value })}>
+            <option value="c">°C</option>
+            <option value="f">°F</option>
+          </select>
+        </label>
+      )}
+      {(t?.type === "net_down" || t?.type === "net_up") && (
+        <label>
+          Unit
+          <select value={t.format ?? "bytes"} onChange={(e) => set({ format: e.target.value === "bytes" ? undefined : e.target.value })}>
+            <option value="bytes">1.2 MB/s</option>
+            <option value="bits">9.9 Mbit/s</option>
+          </select>
+        </label>
+      )}
       {t?.type === "ha_state" && (
         <label>
           Entity
