@@ -77,6 +77,30 @@ export interface Config {
   hotkeys?: Record<string, HotkeyTarget>;
   integrations?: Integrations;
   autoSwitch?: AutoRule[];
+  speaker?: SpeakerConfig;
+}
+
+/** This computer's sound on the chosen Shows (docs/speaker.md). Zero lead or idle is the default. */
+export interface SpeakerConfig {
+  enabled: boolean;
+  shows?: string[];
+  lead_ms?: number;
+  idle_s?: number;
+}
+
+export const SPEAKER_LEAD = { min: 100, max: 1000, default: 200 };
+export const SPEAKER_IDLE = { min: 1, max: 60, default: 5 };
+
+/** The config with the speaker settings changed; what is left at its default is left out. */
+export function setSpeaker(cfg: Config, patch: Partial<SpeakerConfig>): Config {
+  const next = clone(cfg);
+  const sp: SpeakerConfig = { enabled: false, ...(next.speaker ?? {}), ...patch };
+  if (!sp.shows?.length) delete sp.shows;
+  if (!sp.lead_ms || sp.lead_ms === SPEAKER_LEAD.default) delete sp.lead_ms;
+  if (!sp.idle_s || sp.idle_s === SPEAKER_IDLE.default) delete sp.idle_s;
+  if (!sp.enabled && !sp.shows && !sp.lead_ms && !sp.idle_s) delete next.speaker;
+  else next.speaker = sp;
+  return next;
 }
 
 /** Shows `profile` while the application `app` is in front on this computer. */

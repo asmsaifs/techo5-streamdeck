@@ -77,6 +77,20 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if sp := c.Speaker; sp != nil {
+		if sp.LeadMs != 0 && (sp.LeadMs < MinLeadMs || sp.LeadMs > MaxLeadMs) {
+			add("speaker.lead_ms", "must be between %d and %d, or 0 for the default", MinLeadMs, MaxLeadMs)
+		}
+		if sp.IdleS < 0 || sp.IdleS > MaxIdleS {
+			add("speaker.idle_s", "must be between 0 (the default, 5) and %d", MaxIdleS)
+		}
+		for i, s := range sp.Shows {
+			if strings.TrimSpace(s) == "" {
+				add("speaker.shows."+strconv.Itoa(i), "is empty")
+			}
+		}
+	}
+
 	for i, r := range c.AutoSwitch {
 		path := "autoSwitch." + strconv.Itoa(i)
 		if strings.TrimSpace(r.App) == "" {

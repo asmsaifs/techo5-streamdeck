@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -338,5 +339,33 @@ func TestSchemasMatchTheRegistry(t *testing.T) {
 		if deckOwn == slices.Contains(reg.Types(), typ) {
 			t.Errorf("%s: deck-handled and registered must be opposites", typ)
 		}
+	}
+}
+
+func TestSpeakerToggle(t *testing.T) {
+	tests := []struct {
+		json string
+		want string // what the Speaker hook was asked, or the error
+	}{
+		{`{"type":"speaker.toggle"}`, "flip"},
+		{`{"type":"speaker.toggle","on":true}`, "true"},
+		{`{"type":"speaker.toggle","on":false}`, "false"},
+	}
+	for _, tt := range tests {
+		r := New(&fake{}, nil)
+		var got string
+		r.Speaker = func(on *bool) error {
+			got = "flip"
+			if on != nil {
+				got = strconv.FormatBool(*on)
+			}
+			return nil
+		}
+		if err := r.Run(context.Background(), act(t, tt.json)); err != nil || got != tt.want {
+			t.Errorf("%s: asked %q, %v; want %q", tt.json, got, err, tt.want)
+		}
+	}
+	if err := New(&fake{}, nil).Run(context.Background(), act(t, `{"type":"speaker.toggle"}`)); err == nil {
+		t.Error("no error without a speaker")
 	}
 }

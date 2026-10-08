@@ -31,7 +31,24 @@ type Config struct {
 	// AutoSwitch gives a Show another profile while an application is in front on this computer.
 	// The first rule that matches wins.
 	AutoSwitch []AutoRule `json:"autoSwitch,omitempty"`
+	// Speaker makes the Shows this computer's speaker (docs/speaker.md).
+	Speaker *Speaker `json:"speaker,omitempty"`
 }
+
+// Speaker plays this computer's sound on the chosen Shows over Sendspin.
+type Speaker struct {
+	Enabled bool     `json:"enabled"`
+	Shows   []string `json:"shows,omitempty"`   // by the names they advertise
+	LeadMs  int      `json:"lead_ms,omitempty"` // how far ahead the sound is stamped; 200 if 0
+	IdleS   int      `json:"idle_s,omitempty"`  // silence before the Shows are let go; 5 if 0
+}
+
+// Speaker limits, as the editor's sliders have them.
+const (
+	MinLeadMs = 100
+	MaxLeadMs = 1000
+	MaxIdleS  = 600
+)
 
 // AutoRule switches to Profile while the application App is in front.
 type AutoRule struct {

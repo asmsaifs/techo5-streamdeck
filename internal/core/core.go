@@ -25,6 +25,7 @@ import (
 	"github.com/asmsaifs/techo5-streamdeck/internal/server"
 	appsrc "github.com/asmsaifs/techo5-streamdeck/internal/sources/app"
 	"github.com/asmsaifs/techo5-streamdeck/internal/sources/web"
+	"github.com/asmsaifs/techo5-streamdeck/internal/speaker"
 	"github.com/asmsaifs/techo5-streamdeck/internal/store"
 	"github.com/asmsaifs/techo5-streamdeck/internal/tiles"
 )
@@ -51,6 +52,8 @@ type Core struct {
 	Actions *actions.Registry
 	// Secrets holds the Home Assistant token and the OBS password, in the OS keychain.
 	Secrets secrets.Store
+	// Speaker plays this computer's sound on the Shows the config picks (docs/speaker.md).
+	Speaker *speaker.Speaker
 	Dir     string
 
 	listen string
@@ -88,6 +91,9 @@ func New(o Options) (*Core, error) {
 	c.Secrets = secrets.Keyring()
 	c.Actions.Secrets = c.Secrets
 	c.Actions.Integrations = func() *deck.Integrations { return c.Store.Config().Integrations }
+	c.Speaker = speaker.New()
+	c.Speaker.Apply(st.Config().Speaker)
+	c.Actions.Speaker = c.SetSpeaker
 	c.Server = &server.Server{
 		Config:   st.Config,
 		Runner:   c.Actions,
@@ -145,6 +151,7 @@ func (c *Core) OnReload(fn func(*deck.Config)) {
 // Shows are redrawn and the OnReload callbacks run.
 func (c *Core) Reload() {
 	c.Server.Reload()
+	c.Speaker.Apply(c.Store.Config().Speaker)
 	c.mu.Lock()
 	fns := make([]func(*deck.Config), len(c.onReload))
 	copy(fns, c.onReload)
@@ -311,6 +318,33 @@ func (c *Core) Close() {
 	c.Pause()
 	c.stop()
 	c.Server.Web.Close()
+	c.Speaker.Close()
+}
+
+// SetSpeaker turns the Shows-as-speaker on or off, or over when on is nil, and saves that in the
+// config.
+func (c *Core) SetSpeaker(on *bool) error {
+	b, err := store.Encode(c.Store.Config())
+	if err != nil {
+		return err
+	}
+	cfg, err := store.Parse(b)
+	if err != nil {
+		return err
+	}
+	if cfg.Speaker == nil {
+		cfg.Speaker = &deck.Speaker{}
+	}
+	if on == nil {
+		cfg.Speaker.Enabled = !cfg.Speaker.Enabled
+	} else {
+		cfg.Speaker.Enabled = *on
+	}
+	if err := c.Store.Save(cfg); err != nil {
+		return err
+	}
+	c.Reload()
+	return nil
 }
 
 // LANIP is this computer's address on the LAN, as a guess for the instructions: the source

@@ -167,3 +167,41 @@ only Edge was at hand), all checked by tests that run a real browser:
   has exited: browser shutdown waits for it and runs once.
 - Not done: Chrome download if none is installed (4.4), a Windows/Linux check (compiles only),
   `Fetch` checks only the main frame, so a frame inside an allowed page can show anything.
+
+## Step 10.1: Sendspin from Go to the Show (spike `spikes/sendspin`)
+
+Run on 2026-10-08 against the Echo Show 5 2nd gen (192.168.1.181, TECHO5 v1.3.x) over Wi-Fi, with
+the sender in `internal/sendspin` (the spike is a thin loop over it).
+
+- **Discovery works**: `_sendspin._tcp` finds the Show as `Echo Show 5 2nd gen` at
+  `ws://192.168.1.181:8928/sendspin` (TXT `name=`, `path=/sendspin`) within a second.
+- **A second server gets 409, as expected** ("already connected"), and the Group reports the Show
+  busy once and does not dial it again until the sound next starts.
+- **Music Assistant never lets go.** The Show's log shows Music Assistant (192.168.1.208)
+  connected for a day at a time, through `group state=stopped`, and back within 20 s of any
+  drop. So it is not "busy while Music Assistant plays": with Music Assistant on the network the
+  computer is turned away **always**, and the desktop's activity gate cannot change that.
+  docs/speaker.md §3 *Taking over from Music Assistant* is therefore required, not a nicety: the
+  Show must let a server that starts a stream take the room from one that is connected but idle
+  (the spec's ranking by activity, with `client/goodbye` reason `another_server` to the old one).
+  Until then the speaker works only on a Show that Music Assistant does not hold (the player
+  disabled in Music Assistant, or no Music Assistant).
+- **FLAC encode** (`BenchmarkFLACEncode`, M-series Mac): 137 µs per 20 ms chunk, 0.7 % of one
+  core per Show; a tone codes to 752 bytes a chunk against 3840 for PCM. The whole spike (tone
+  generation, gate, mDNS) used 1.1 % of one core.
+- **Gate**: the Show was let go 5.0 s after the sound stopped (`idle_s` 5).
+- **Played, with Music Assistant stopped** (disabling the player in Music Assistant was not enough:
+  its Sendspin side still dialed in). FLAC was chosen, Show log `late=0 dropped=0` over 20 s at
+  200 ms, `lead_ms` 196-198 on arrival, drift held within 2 ms.
+- **Time to connect**: 360 ms from the first sound (100 ms gate, mDNS answered at once, handshake,
+  clock burst). It was 2.2 s while the resolve waited out a fixed 2 s browse; it now stops at the
+  first answer.
+- **Lead**: 100 ms gave 7 late chunks in 30 s. 150 ms was clean for 45 s, then a Wi-Fi stall of
+  several seconds cut the margin to 75 ms and 206 chunks came late. The Show's output plays about
+  85 ms behind what it is handed (`queued_ms` against `lead_ms`), so the usable margin is the lead
+  less that. **200 ms stays the default.**
+- **Start skip**: chunks held from before the connection were replayed with as little as 20 ms
+  left, and the Show anchored the stream on a late one: a 115 ms skip at every start. Only those
+  with half the lead left are replayed now; the start then corrects by 39 ms, the clock filter
+  settling.
+- Still to do: the 10-minute listening run.

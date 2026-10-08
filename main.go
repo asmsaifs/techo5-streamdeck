@@ -145,6 +145,28 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 			pause.SetChecked(true)
 		}
 	})
+	// The speaker: the checkbox saves speaker.enabled, and the line under it says what it is doing.
+	speakerOn := menu.AddCheckbox("Play sound on Show", c.Speaker.Status().Enabled)
+	speakerState := menu.Add("    " + c.Speaker.Status().Text)
+	speakerState.SetEnabled(false)
+	speakerOn.OnClick(func(*application.Context) {
+		on := speakerOn.Checked()
+		if err := c.SetSpeaker(&on); err != nil {
+			slog.Error("speaker", "err", err)
+		}
+	})
+	var lastSpeaker atomic.Value // string: the label shown, so the menu is rebuilt only on a change
+	c.Speaker.OnChange(func() {
+		st := c.Speaker.Status()
+		label := "    " + st.Text
+		if old, _ := lastSpeaker.Swap(label).(string); old == label && speakerOn.Checked() == st.Enabled {
+			return
+		}
+		speakerOn.SetChecked(st.Enabled)
+		speakerState.SetLabel(label)
+		menu.Update()
+	})
+	menu.AddSeparator()
 	login := menu.AddCheckbox("Start at login", false)
 	login.OnClick(func(*application.Context) {
 		var err error

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Browser, Device, Settings } from "./api";
 import { browsers, devices, errorText, regenerateKey, setListen, settings } from "./api";
 import { frontApp, secretStatus, setSecret } from "./api";
-import type { SecretStatus } from "./api";
+import type { SecretStatus, SendspinPlayer, SpeakerStatus } from "./api";
+import { speakerShows, speakerStatus, speakerTestTone } from "./api";
 import { confirm } from "./Dialog";
 import * as m from "./model";
 
@@ -170,6 +171,7 @@ export function DevicesPanel(p: { cfg: m.Config; edit: (c: m.Config) => void; sa
           </>
         )}
 
+        <Speaker cfg={p.cfg} edit={p.edit} say={p.say} />
         <AutoSwitch cfg={p.cfg} edit={p.edit} say={p.say} />
         <Integrations cfg={p.cfg} edit={p.edit} say={p.say} />
       </div>
@@ -283,6 +285,82 @@ function AutoSwitch(p: { cfg: m.Config; edit: (c: m.Config) => void; say: Say })
         </table>
       )}
       <button onClick={() => p.edit(m.setAutoSwitch(p.cfg, [...rules, { app: "", profile: profiles[0] }]))}>Add rule</button>
+    </>
+  );
+}
+
+/** The Shows as this computer's speaker: which Shows, how far ahead, how long to wait in silence,
+ * and a test tone. Part of the config, saved with it; the tone uses the picks as they are now. */
+function Speaker(p: { cfg: m.Config; edit: (c: m.Config) => void; say: Say }) {
+  const sp = p.cfg.speaker ?? { enabled: false };
+  const picked = sp.shows ?? [];
+  const lead = sp.lead_ms || m.SPEAKER_LEAD.default;
+  const idle = sp.idle_s || m.SPEAKER_IDLE.default;
+  const [found, setFound] = useState<SendspinPlayer[] | null>(null);
+  const [looking, setLooking] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [st, setSt] = useState<SpeakerStatus | null>(null);
+
+  const look = useCallback(() => {
+    setLooking(true);
+    speakerShows()
+      .then((l) => setFound(l ?? []))
+      .catch((e) => p.say({ kind: "err", text: errorText(e) }))
+      .finally(() => setLooking(false));
+  }, [p]);
+  useEffect(look, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let stop = false;
+    const tick = () => speakerStatus().then((s) => !stop && setSt(s)).catch(() => {});
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => ((stop = true), clearInterval(id));
+  }, []);
+
+  const names = [...new Set([...(found ?? []).map((f) => f.Name), ...picked])];
+  const toggle = (n: string, on: boolean) => p.edit(m.setSpeaker(p.cfg, { shows: on ? [...picked, n] : picked.filter((x) => x !== n) }));
+  const test = () => {
+    setTesting(true);
+    speakerTestTone(picked, lead)
+      .then(() => p.say({ kind: "ok", text: "The tone played on " + picked.join(", ") + "." }))
+      .catch((e) => p.say({ kind: "err", text: errorText(e) }))
+      .finally(() => setTesting(false));
+  };
+
+  return (
+    <>
+      <h3>Speaker</h3>
+      <p className="hint">
+        Plays this computer's sound on the Shows ticked here: pick “TECHO5 Show” as the sound output. The Shows are only taken while there is sound, and let go after the silence below.
+        {st && <> Now: {st.Text}.</>}
+      </p>
+      <label className="row">
+        <input type="checkbox" checked={sp.enabled} onChange={(e) => p.edit(m.setSpeaker(p.cfg, { enabled: e.target.checked }))} /> Play sound on Show
+      </label>
+      <div className="row">
+        <strong>Shows</strong>
+        <span className="spacer" />
+        <button disabled={looking} onClick={look}>{looking ? "Looking…" : "Look again"}</button>
+      </div>
+      {names.length === 0 && <p className="hint">{looking ? "Looking for Shows on the network…" : "No Sendspin player answered. Is the Show on this network?"}</p>}
+      {names.map((n) => (
+        <label key={n} className="row">
+          <input type="checkbox" checked={picked.includes(n)} onChange={(e) => toggle(n, e.target.checked)} /> {n}
+          {found && !found.some((f) => f.Name === n) && <small className="hint"> (not answering now)</small>}
+        </label>
+      ))}
+      <label>
+        Lead: {lead} ms
+        <input type="range" min={m.SPEAKER_LEAD.min} max={m.SPEAKER_LEAD.max} step={10} value={lead} onChange={(e) => p.edit(m.setSpeaker(p.cfg, { lead_ms: Number(e.target.value) }))} />
+        <small className="hint">How far behind the computer the Show plays. Less is closer to a video's picture; too little and Wi-Fi hiccups are heard.</small>
+      </label>
+      <label>
+        Let go after {idle} s of silence
+        <input type="range" min={m.SPEAKER_IDLE.min} max={m.SPEAKER_IDLE.max} step={1} value={idle} onChange={(e) => p.edit(m.setSpeaker(p.cfg, { idle_s: Number(e.target.value) }))} />
+        <small className="hint">Until then no other source, such as Music Assistant, can play on the Show.</small>
+      </label>
+      <button disabled={testing || picked.length === 0} onClick={test}>{testing ? "Playing…" : "Test tone"}</button>
+      <p className="hint">Changes apply once you save. The test tone uses the Shows and lead as they are here.</p>
     </>
   );
 }

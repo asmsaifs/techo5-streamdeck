@@ -28,6 +28,9 @@ type Registry struct {
 	// holds their token and password. Both may be nil: those actions then say they are not set up.
 	Integrations func() *deck.Integrations
 	Secrets      secrets.Store
+	// Speaker turns the Shows-as-speaker on (true), off (false) or over (nil), and saves it. Nil
+	// where there is no speaker to switch: speaker.toggle then says so.
+	Speaker func(on *bool) error
 
 	mu       sync.RWMutex
 	handlers map[string]Handler
@@ -54,6 +57,7 @@ func New(sys System, log *slog.Logger) *Registry {
 	r.Register("http", httpAction)
 	r.Register("ha.service", haServiceAction)
 	r.Register("obs", obsAction)
+	r.Register("speaker.toggle", speakerToggle)
 	return r
 }
 

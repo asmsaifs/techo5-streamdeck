@@ -500,6 +500,8 @@ control it by touch. Tag `v0.5.0`.
   if streamed latency ever feels slow.
 - Stream Deck profile import (`.streamDeckProfile` is a zip of JSON + PNGs).
 
+**Phases 10–13 — The Show as the computer's speaker** (virtual output device → Sendspin): see [docs/speaker.md](docs/speaker.md).
+
 ---
 
 ## 4. Security (non-negotiable)

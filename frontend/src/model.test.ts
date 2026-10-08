@@ -194,3 +194,15 @@ describe("auto-switch rules", () => {
     expect(m.ruleProblem(c, { app: "x", profile: "default" })).toBeNull();
   });
 });
+
+describe("setSpeaker", () => {
+  const base = { version: 1, server: { listen: "0.0.0.0:9555", key: "k" }, profiles: {} } as m.Config;
+  it.each([
+    ["defaults leave nothing", { enabled: false, lead_ms: 200, idle_s: 5 }, undefined],
+    ["on with a Show", { enabled: true, shows: ["Kitchen"] }, { enabled: true, shows: ["Kitchen"] }],
+    ["a lead off the default is kept", { lead_ms: 150 }, { enabled: false, lead_ms: 150 }],
+    ["no Shows drops the list", { enabled: true, shows: [] }, { enabled: true }],
+  ])("%s", (_, patch, want) => {
+    expect(m.setSpeaker(base, patch as Partial<m.SpeakerConfig>).speaker).toEqual(want);
+  });
+});

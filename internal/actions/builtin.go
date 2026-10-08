@@ -207,3 +207,18 @@ func toggle(ctx context.Context, r *Registry, a *deck.Action) error {
 	r.mu.Unlock()
 	return nil
 }
+
+// speakerToggle switches the Shows-as-speaker (docs/speaker.md): on, off, or over when on is not
+// given.
+func speakerToggle(_ context.Context, r *Registry, a *deck.Action) error {
+	var p struct {
+		On *bool `json:"on"`
+	}
+	if err := params(a, &p); err != nil {
+		return err
+	}
+	if r.Speaker == nil {
+		return errors.New("the speaker is not available here")
+	}
+	return r.Speaker(p.On)
+}

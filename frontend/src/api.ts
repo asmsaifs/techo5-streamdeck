@@ -79,3 +79,20 @@ export interface FrontApp {
 }
 /** Waits, then names the application in front: pick the application during the wait. */
 export const frontApp = (waitSeconds: number) => call<FrontApp>("FrontApp", waitSeconds);
+
+export interface SpeakerStatus {
+  Enabled: boolean;
+  Text: string;
+  Playing: string[] | null;
+  Busy: string[] | null;
+  Failed: Record<string, string> | null;
+}
+export interface SendspinPlayer {
+  Name: string;
+  URL: string;
+}
+export const speakerStatus = () => call<SpeakerStatus>("SpeakerStatus");
+/** The Sendspin players answering on the network now; takes a few seconds. */
+export const speakerShows = () => call<SendspinPlayer[] | null>("SpeakerShows");
+/** Plays a 2 s tone on the Shows; rejects with which did not play it and why. */
+export const speakerTestTone = (shows: string[], leadMs: number) => call<void>("SpeakerTestTone", shows, leadMs);

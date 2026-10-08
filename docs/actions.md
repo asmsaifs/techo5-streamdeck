@@ -19,6 +19,7 @@ with `decksrv -dry-run`, which logs what each action would do and does none of i
 | `volume.set` | `level` (0-100) | Windows has no way to read or set the level, so it steps to 0 and counts up in 2 % steps. |
 | `volume.mute` | `mute` (true, false, or empty to flip) | Windows can only flip. |
 | `mic.mute` | `mute` (as above) | macOS has no input mute: it sets the input level to 0 and puts the old level back. Linux `wpctl`/`pactl`. **Not on Windows yet** (needs the Core Audio API). |
+| `speaker.toggle` | `on` (true, false, or empty to flip) | Switches *Play sound on Show* (docs/speaker.md) and saves it, as the tray checkbox does. |
 | `lock`, `sleep` | | macOS lock presses Ctrl+Cmd+Q (Accessibility), sleep is `pmset sleepnow`. Windows `rundll32`. Linux `loginctl lock-session`, `systemctl suspend`. |
 | `screenshot` | | Saves a PNG to the Desktop (macOS) or Pictures (Linux: grim, gnome-screenshot, spectacle or scrot). Windows opens the Snipping Tool (Win+Shift+S). |
 | `http` | `method` (GET), `url`, `headers` ("Name: value" each), `body`, `timeout` (s, 10) | A webhook. Only http and https. Worked if the status is below 400; the start of the reply is the error otherwise. A failing request never puts the URL's query (where keys often are) in the log. |
