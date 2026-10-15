@@ -169,42 +169,46 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 		installing atomic.Bool
 	)
 	upd := menu.Add("Check for updates")
+	// The menu item belongs to AppKit, which only tolerates changes on the main thread, and the
+	// checks and the install run on goroutines. The label is changed in place: rebuilding the whole
+	// menu would free the item whose click is still being handled.
+	show := func(label string, enabled bool) {
+		application.InvokeAsync(func() {
+			upd.SetLabel(label)
+			upd.SetEnabled(enabled)
+		})
+	}
 	checkUpdate := func(manual bool) {
 		r, isNewer, err := update.Check(context.Background(), nil, update.LatestURL, update.ReleaseKey, version)
 		switch {
 		case err != nil:
 			slog.Warn("update check", "err", err)
 			if manual {
-				upd.SetLabel("Update check failed, try again")
+				show("Update check failed, try again", true)
 			}
 		case isNewer:
 			rel = r
 			if canInstall && update.AssetName(runtime.GOOS, runtime.GOARCH, r.Version) != "" {
-				upd.SetLabel("Install " + r.Version + " and restart")
+				show("Install "+r.Version+" and restart", true)
 			} else {
 				canInstall = false
-				upd.SetLabel("Download " + r.Version)
+				show("Download "+r.Version, true)
 			}
 		default:
 			rel = update.Release{}
 			if manual {
-				upd.SetLabel("Up to date (" + version + ")")
+				show("Up to date ("+version+")", true)
 			}
 		}
-		menu.Update()
 	}
 	install := func() {
 		defer installing.Store(false)
-		upd.SetEnabled(false)
-		upd.SetLabel("Downloading " + rel.Version + "…")
-		menu.Update()
+		show("Downloading "+rel.Version+"…", false)
 		fail := func(err error) {
 			slog.Error("install the update", "err", err)
 			// Fall back to the page, where the user can install by hand.
 			canInstall = false
-			upd.SetEnabled(true)
-			upd.SetLabel("Install failed, download " + rel.Version)
-			menu.Update()
+			show("Install failed, download "+rel.Version, true)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
@@ -213,8 +217,7 @@ func run(dir, listen string, dry, hidden bool, quit time.Duration) error {
 			fail(err)
 			return
 		}
-		upd.SetLabel("Installing " + rel.Version + "…")
-		menu.Update()
+		show("Installing "+rel.Version+"…", false)
 		if err := update.Install(file, os.Args[1:]); err != nil {
 			fail(err)
 			return
