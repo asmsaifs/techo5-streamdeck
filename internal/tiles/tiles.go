@@ -23,6 +23,8 @@ import (
 // Value is one reading.
 type Value struct {
 	Text string // what the tile shows; empty for a state tile
+	// Ring is set by a usage tile: the percent (0-100) to draw as a ring around Text.
+	Ring *float64
 	// On is set by a state tile: whether the thing it watches is on.
 	On  *bool
 	Err error
@@ -38,6 +40,8 @@ type Env struct {
 	GPU  func(ctx context.Context) (float64, error) // percent
 	// Rate is bytes per second for a net_down, net_up, disk_read or disk_write tile.
 	Rate func(ctx context.Context, kind string) (float64, error)
+	// Usage is the percentage of a subscription limit used, for a claude_* or chatgpt_* tile.
+	Usage func(ctx context.Context, k UsageKind) (float64, error)
 	// HA is a Home Assistant entity's state, with its unit when it has one.
 	HA func(ctx context.Context, entity string) (string, error)
 	// Muted says whether the sound ("volume.mute") or the microphone ("mic.mute") is muted.
@@ -73,6 +77,7 @@ func OSEnv(ha func(ctx context.Context, entity string) (string, error)) Env {
 		Temp:   temperature,
 		GPU:    gpuLoad,
 		Rate:   rate,
+		Usage:  usage,
 		HA:     ha,
 		Output: osOutput,
 	}
@@ -99,6 +104,8 @@ func Every(t *deck.Tile) time.Duration {
 		return time.Second
 	case deck.TileCPU, deck.TileGPU, deck.TileNetDown, deck.TileNetUp, deck.TileDiskRead, deck.TileDiskWrite:
 		return 2 * time.Second
+	case deck.TileClaudeSession, deck.TileClaudeWeek, deck.TileChatGPTSession, deck.TileChatGPTWeek:
+		return time.Minute // the services are not asked more often than their own apps do
 	case deck.TileScript:
 		return 10 * time.Second
 	case deck.TileMute:
@@ -142,6 +149,15 @@ func Read(ctx context.Context, e Env, t *deck.Tile) Value {
 			return Value{Text: speed(v*8, "bit/s")}
 		}
 		return Value{Text: speed(v, "B/s")}
+	case deck.TileClaudeSession, deck.TileClaudeWeek, deck.TileChatGPTSession, deck.TileChatGPTWeek:
+		if e.Usage == nil {
+			return Value{Err: errors.New("this computer cannot read usage limits")}
+		}
+		v, err := e.Usage(ctx, usageKinds[t.Type])
+		if err != nil {
+			return Value{Err: err}
+		}
+		return Value{Text: fmt.Sprintf("%.0f%%", v), Ring: &v}
 	case deck.TileHA:
 		s, err := e.HA(ctx, t.Entity)
 		return Value{Text: oneLine(s), Err: err}

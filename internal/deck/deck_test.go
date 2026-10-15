@@ -183,7 +183,7 @@ func TestValidate(t *testing.T) {
 				`profiles.default.pages.home.buttons.1,0.tile.entity: "Sensor Kitchen" is not an entity like sensor.kitchen_temperature`,
 				`profiles.default.pages.home.buttons.1,2.tile.format: "f" is not bytes or bits`,
 				"profiles.default.pages.home.buttons.2,0.tile.command: is missing",
-				`profiles.default.pages.home.buttons.3,0.tile.type: "weather" is not clock, cpu, ram, cpu_temp, gpu_temp, gpu, net_down, net_up, disk_read, disk_write, ha_state, script or state`,
+				`profiles.default.pages.home.buttons.3,0.tile.type: "weather" is not clock, cpu, ram, cpu_temp, gpu_temp, gpu, net_down, net_up, disk_read, disk_write, claude_session, claude_week, chatgpt_session, chatgpt_week, ha_state, script or state`,
 				`profiles.default.pages.home.buttons.3,1.tile.format: "k" is not c or f`,
 				"profiles.default.pages.home.buttons.4,0.tile.every: is 0.2; it must be 1 to 3600 seconds"}},
 	}

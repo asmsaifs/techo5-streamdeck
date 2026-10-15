@@ -31,6 +31,15 @@ func env() Env {
 		Rate: func(_ context.Context, kind string) (float64, error) {
 			return map[string]float64{"net_down": 1_234_567, "net_up": 850_000, "disk_read": 0, "disk_write": 4_500_000_000}[kind], nil
 		},
+		Usage: func(_ context.Context, k UsageKind) (float64, error) {
+			if !k.Claude {
+				return 0, errors.New("Codex is not signed in")
+			}
+			if k.Weekly {
+				return 81.4, nil
+			}
+			return 36.6, nil
+		},
 		HA:     func(_ context.Context, e string) (string, error) { return "21.5 °C", nil },
 		Output: func(context.Context, string, []string, bool) (string, error) { return "", nil },
 	}
@@ -53,6 +62,9 @@ func TestRead(t *testing.T) {
 		{"clock date", deck.Tile{Type: "clock", Format: "date"}, "", nil, "Fri 2 Jan", "", false},
 		{"cpu rounds", deck.Tile{Type: "cpu"}, "", nil, "37%", "", false},
 		{"ram", deck.Tile{Type: "ram"}, "", nil, "62%", "", false},
+		{"claude session", deck.Tile{Type: "claude_session"}, "", nil, "37%", "", false},
+		{"claude week", deck.Tile{Type: "claude_week"}, "", nil, "81%", "", false},
+		{"chatgpt not signed in", deck.Tile{Type: "chatgpt_week"}, "", nil, "", "", true},
 		{"gpu", deck.Tile{Type: "gpu"}, "", nil, "7%", "", false},
 		{"cpu temperature", deck.Tile{Type: "cpu_temp"}, "", nil, "52°C", "", false},
 		{"cpu temperature fahrenheit", deck.Tile{Type: "cpu_temp", Format: "f"}, "", nil, "125°F", "", false},
@@ -290,5 +302,41 @@ func TestCacheReadingSurvivesTheAskerLeaving(t *testing.T) {
 	c.Get(ctx, &deck.Tile{Type: "cpu"}) // the Show goes away while it is read
 	if v := c.Get(context.Background(), &deck.Tile{Type: "cpu"}); v.Err != nil || v.Text != "10%" {
 		t.Errorf("the next Show got %+v", v)
+	}
+}
+
+func TestUsageRing(t *testing.T) {
+	v := Read(context.Background(), env(), &deck.Tile{Type: "claude_week"})
+	if v.Ring == nil || *v.Ring != 81.4 {
+		t.Errorf("ring = %v, want 81.4", v.Ring)
+	}
+}
+
+func TestParseUsage(t *testing.T) {
+	claude := `{"five_hour":{"utilization":12.5,"resets_at":"2026-10-15T10:00:00Z"},"seven_day":{"utilization":140,"resets_at":null},"seven_day_opus":null}`
+	gpt := `{"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":3,"limit_window_seconds":18000},"secondary_window":{"used_percent":44.5,"limit_window_seconds":604800}}}`
+	tests := []struct {
+		name   string
+		parse  func([]byte, bool) (float64, error)
+		body   string
+		weekly bool
+		want   float64
+		bad    bool
+	}{
+		{"claude session", parseClaudeUsage, claude, false, 12.5, false},
+		{"claude week is clamped", parseClaudeUsage, claude, true, 100, false},
+		{"claude no window", parseClaudeUsage, `{"five_hour":null}`, false, 0, true},
+		{"claude junk", parseClaudeUsage, `<html>`, false, 0, true},
+		{"chatgpt session", parseChatGPTUsage, gpt, false, 3, false},
+		{"chatgpt week", parseChatGPTUsage, gpt, true, 44.5, false},
+		{"chatgpt free plan", parseChatGPTUsage, `{"rate_limit":{}}`, true, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.parse([]byte(tt.body), tt.weekly)
+			if (err != nil) != tt.bad || got != tt.want {
+				t.Errorf("got %v, %v; want %v, bad=%v", got, err, tt.want, tt.bad)
+			}
+		})
 	}
 }

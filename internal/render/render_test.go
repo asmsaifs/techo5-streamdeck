@@ -354,6 +354,31 @@ func TestTileGolden(t *testing.T) {
 	}
 }
 
+// A usage tile draws a ring that fills clockwise and changes colour near the limit.
+func TestRingGolden(t *testing.T) {
+	skipGoldensOffMac(t)
+	r := New(t.TempDir())
+	p := &deck.Profile{Grid: deck.DefaultGrid, Theme: deck.DefaultTheme}
+	pg := &deck.Page{Buttons: map[string]*deck.Button{
+		"0,0": {Label: "Claude 5h"}, "1,0": {Label: "Claude week"}, "2,0": {Label: "GPT 5h"},
+		"3,0": {Label: "GPT week"}, "4,0": {},
+	}}
+	pct := func(v float64) *float64 { return &v }
+	st := State{
+		{Col: 0, Row: 0}: {Text: "0%", Ring: pct(0)},
+		{Col: 1, Row: 0}: {Text: "37%", Ring: pct(37)},
+		{Col: 2, Row: 0}: {Text: "75%", Ring: pct(75)},
+		{Col: 3, Row: 0}: {Text: "96%", Ring: pct(96)},
+		{Col: 4, Row: 0}: {Text: "100%", Ring: pct(100)},
+	}
+	golden(t, "rings-960x480.png", r.Grid(p, pg, image.Pt(960, 480), st))
+	a := r.Cell(p, pg.Buttons["1,0"], deck.Cell{}, image.Pt(960, 480), CellState{Text: "37%", Ring: pct(37)})
+	b := r.Cell(p, pg.Buttons["1,0"], deck.Cell{}, image.Pt(960, 480), CellState{Text: "37%"})
+	if bytes.Equal(a.Pix, b.Pix) {
+		t.Error("Ring changed nothing")
+	}
+}
+
 // The goldens are rasterised text, and Windows and Linux draw the same glyphs a few pixels
 // differently.
 func skipGoldensOffMac(t *testing.T) {

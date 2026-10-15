@@ -136,6 +136,8 @@ can still have an action.
 | `cpu_temp`, `gpu_temp` | the processor's and the graphics card's temperature; `format` `c` (default) or `f`. From the system's sensors, and `nvidia-smi` for an NVIDIA card. Apple silicon has no graphics sensor of its own, so `gpu_temp` there is the chip's die, like `cpu_temp`. Windows often reports no processor temperature without admin rights, and the tile then says so | 5 s |
 | `net_down`, `net_up` | received and sent per second, over all network cards but the loopback, VPN tunnels, and container and virtual machine networks (whose traffic the real card carries too); `format` `bytes` (default, "1.2 MB/s") or `bits` ("9.9 Mbit/s") | 2 s |
 | `disk_read`, `disk_write` | read from and written to the disks per second (on Linux whole disks only, so a partition is not counted twice) | 2 s |
+| `claude_session`, `claude_week` | how much of the Claude subscription's 5-hour session limit and weekly limit is used, as a ring (green, amber from 70 %, red from 90 %) with the percentage in it. Read from Claude Code's own sign-in (macOS keychain, else `~/.claude/.credentials.json`); undocumented API, so it may change | 60 s |
+| `chatgpt_session`, `chatgpt_week` | the same for ChatGPT's 5-hour and weekly Codex limits, from the Codex CLI's sign-in (`$CODEX_HOME/auth.json`, default `~/.codex`; must be signed in with ChatGPT, not an API key). Undocumented API | 60 s |
 | `ha_state` | a Home Assistant `entity`'s state with its unit ("21.5 °C"); address and token as for `ha.service` | 5 s |
 | `script` | the first line `command` (with `args`, or a `shell` line) prints, cut to 60 characters | 10 s |
 | `state` | nothing: whether the command says the button's toggle is really on (exit 0 and not "no", "false", "off" or "0") | 5 s |

@@ -270,6 +270,7 @@ func (s *Source) Refresh() {
 			v.On = *tv.val.On
 		default:
 			v.Text = tv.val.Text
+			v.Ring = tv.val.Ring
 		}
 		st[c] = v
 	}
@@ -540,7 +541,9 @@ func (s *Source) readTile(tv *tileVal, tile *model.Tile, page string, cell model
 			o.SetOn(actions.ButtonKey(s.Profile(), page, cell), *v.On)
 		}
 	}
-	if first || v.Text != old.Text || (v.Err == nil) != (old.Err == nil) || (v.On == nil) != (old.On == nil) || (v.On != nil && *v.On != *old.On) {
+	if first || v.Text != old.Text || !sameRing(v.Ring, old.Ring) || (v.Err == nil) != (old.Err == nil) || (v.On == nil) != (old.On == nil) || (v.On != nil && *v.On != *old.On) {
 		s.Refresh()
 	}
 }
+
+func sameRing(a, b *float64) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }

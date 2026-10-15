@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"math"
 	"sync"
 
 	"github.com/fogleman/gg"
@@ -36,6 +37,9 @@ type CellState struct {
 	Disabled bool  // greyed out
 	// Text is a live tile's value, drawn big where the icon would be (and instead of it).
 	Text string
+	// Ring, when set, is a percent (0-100) drawn as a ring around Text: a usage limit. Nil
+	// leaves the text plain.
+	Ring *float64
 }
 
 // State is the CellState of the cells that are not plain. A cell not in it is plain.
@@ -248,6 +252,47 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 		draw.DrawMask(img, at, ic, image.Point{}, image.NewUniform(color.Alpha{alpha}), image.Point{}, draw.Over)
 	}
 
+	ringed := st.Ring != nil && st.Text != ""
+	if ringed {
+		// A usage ring takes the icon's room, with the percentage inside it.
+		top, bottom := y0+0.08*h, y0+h-0.07*h
+		if len(lines) > 0 {
+			bottom -= labelH + 0.04*h
+		}
+		d := min(bottom-top, 0.8*w)
+		ringCY := (top + bottom) / 2
+		lw := 0.12 * d
+		r0 := (d - lw) / 2
+		dc.SetLineCapButt()
+		dc.SetLineWidth(lw)
+		dc.SetColor(mix(fg, fill, 0.8)) // the track: the part still free
+		dc.DrawCircle(cx, ringCY, r0)
+		dc.Stroke()
+		frac := max(0, min(1, *st.Ring/100))
+		if frac > 0 {
+			col := ringColour(*st.Ring)
+			if st.Disabled {
+				col = mix(col, pal.bg, disabledMix)
+			}
+			dc.SetColor(col)
+			// From twelve o'clock, clockwise; a full ring is a circle, as an arc of 2π is empty.
+			if frac >= 0.9995 {
+				dc.DrawCircle(cx, ringCY, r0)
+			} else {
+				dc.DrawArc(cx, ringCY, r0, -math.Pi/2, -math.Pi/2+2*math.Pi*frac)
+			}
+			dc.Stroke()
+		}
+		inner := d - 2*lw
+		ls, tpx := fitLabel(st.Text, 0.9*inner, 0.3*d, measure)
+		dc.SetFontFace(face(tpx))
+		dc.SetColor(fg)
+		for i, line := range ls {
+			dc.DrawStringAnchored(line, cx, ringCY+float64(tpx)*1.2*(float64(i)+0.5-float64(len(ls))/2), 0.5, 0.35)
+		}
+		vLines = nil
+	}
+
 	if len(vLines) > 0 {
 		dc.SetFontFace(face(vPx))
 		dc.SetColor(fg)
@@ -268,7 +313,7 @@ func (r *Renderer) drawCell(dc *gg.Context, img *image.RGBA, origin image.Point,
 		dc.SetColor(fg)
 		// Centred in the room below the icon, or in the whole cell when there is no icon.
 		ty := cy - labelH/2
-		if ic != nil || len(vLines) > 0 {
+		if ic != nil || len(vLines) > 0 || ringed {
 			ty = y0 + h - 0.07*h - labelH
 		}
 		for i, line := range lines {
@@ -296,4 +341,15 @@ func fitLabel(text string, width, base float64, measure func(px int) func(string
 	}
 	ls, _ := wrapLabel(text, width, 2, measure(small))
 	return ls, small
+}
+
+// ringColour is the colour of a usage ring: calm while there is room, warning near the limit.
+func ringColour(percent float64) color.RGBA {
+	switch {
+	case percent >= 90:
+		return flashErr
+	case percent >= 70:
+		return color.RGBA{0xf0, 0xa2, 0x2a, 255}
+	}
+	return flashOK
 }

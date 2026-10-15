@@ -281,7 +281,8 @@ func validateTile(path string, t *Tile, add func(path, format string, args ...an
 		if !clockFormats[t.Format] {
 			add(path+".format", "%q is not 24h, 12h, 24h-seconds or date", t.Format)
 		}
-	case TileCPU, TileRAM, TileGPU, TileDiskRead, TileDiskWrite:
+	case TileCPU, TileRAM, TileGPU, TileDiskRead, TileDiskWrite,
+		TileClaudeSession, TileClaudeWeek, TileChatGPTSession, TileChatGPTWeek:
 	case TileCPUTemp, TileGPUTemp:
 		if t.Format != "" && t.Format != "c" && t.Format != "f" {
 			add(path+".format", "%q is not c or f", t.Format)
@@ -301,6 +302,6 @@ func validateTile(path string, t *Tile, add func(path, format string, args ...an
 	case "":
 		add(path+".type", "is missing")
 	default:
-		add(path+".type", "%q is not clock, cpu, ram, cpu_temp, gpu_temp, gpu, net_down, net_up, disk_read, disk_write, ha_state, script or state", t.Type)
+		add(path+".type", "%q is not clock, cpu, ram, cpu_temp, gpu_temp, gpu, net_down, net_up, disk_read, disk_write, claude_session, claude_week, chatgpt_session, chatgpt_week, ha_state, script or state", t.Type)
 	}
 }

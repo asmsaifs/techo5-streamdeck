@@ -128,6 +128,13 @@ const (
 	TileNetUp     = "net_up"
 	TileDiskRead  = "disk_read"
 	TileDiskWrite = "disk_write"
+
+	// How much of a subscription's limit is used, drawn as a ring with the percentage in it: the
+	// session (5 hour) window and the weekly one, for Claude Code and for ChatGPT (Codex).
+	TileClaudeSession  = "claude_session"
+	TileClaudeWeek     = "claude_week"
+	TileChatGPTSession = "chatgpt_session"
+	TileChatGPTWeek    = "chatgpt_week"
 )
 
 // ImplicitTile is the tile a button gets without having one: a mute button with an icon for the
